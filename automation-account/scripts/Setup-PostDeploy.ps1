@@ -342,6 +342,22 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
     Invoke-MgGraphRequest -Method POST -Uri 'https://graph.microsoft.com/v1.0/applications' -Body $createAppBody -ContentType 'application/json'
   }
 
+  Write-Host "Persisting Easy Auth Entra app identifiers to azd environment variables..."
+  & azd env set EASY_AUTH_ENTRA_APP_OBJECT_ID $aadApp.id
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning 'Failed to persist EASY_AUTH_ENTRA_APP_OBJECT_ID to azd environment.'
+  }
+
+  & azd env set EASY_AUTH_ENTRA_APP_CLIENT_ID $aadApp.appId
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning 'Failed to persist EASY_AUTH_ENTRA_APP_CLIENT_ID to azd environment.'
+  }
+
+  & azd env set EASY_AUTH_ENTRA_APP_DISPLAY_NAME $aadApp.displayName
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning 'Failed to persist EASY_AUTH_ENTRA_APP_DISPLAY_NAME to azd environment.'
+  }
+
   $servicePrincipalResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$($aadApp.appId)'"
   $easyAuthServicePrincipal = $null
   if (-not $servicePrincipalResponse.value -or $servicePrincipalResponse.value.Count -eq 0) {
@@ -427,6 +443,7 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
 
   Write-Host "Configured Easy Auth for Web App '$webAppName'."
   Write-Host "Easy Auth Entra app display name: $easyAuthDisplayName"
+  Write-Host "Easy Auth Entra app objectId: $($aadApp.id)"
   Write-Host "Easy Auth Entra app clientId: $($aadApp.appId)"
   Write-Host "Easy Auth issuer: https://login.microsoftonline.com/$TenantId/v2.0"
   Write-Host "Easy Auth groupMembershipClaims: $($aadApp.groupMembershipClaims)"

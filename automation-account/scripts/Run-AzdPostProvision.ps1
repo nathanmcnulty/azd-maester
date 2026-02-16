@@ -26,6 +26,24 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Get-EnvValue {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$Lines,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Name
+  )
+
+  foreach ($line in $Lines) {
+    if ($line -like "$Name=*") {
+      return $line.Split('=', 2)[1].Trim('"')
+    }
+  }
+
+  return $null
+}
+
 Import-Module Az.Accounts -Force
 
 if (-not $SubscriptionId) {
@@ -74,6 +92,26 @@ if ($SecurityGroupDisplayName) {
 }
 
 & "$PSScriptRoot\Setup-PostDeploy.ps1" @setupParams
+
+$easyAuthAppObjectId = 'n/a'
+$easyAuthAppClientIdFromEnv = 'n/a'
+$easyAuthAppDisplayName = 'n/a'
+$envValues = & azd env get-values
+if ($LASTEXITCODE -eq 0) {
+  $easyAuthAppObjectIdValue = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID'
+  $easyAuthAppClientIdValue = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_CLIENT_ID'
+  $easyAuthAppDisplayNameValue = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_DISPLAY_NAME'
+
+  if (-not [string]::IsNullOrWhiteSpace($easyAuthAppObjectIdValue)) {
+    $easyAuthAppObjectId = $easyAuthAppObjectIdValue
+  }
+  if (-not [string]::IsNullOrWhiteSpace($easyAuthAppClientIdValue)) {
+    $easyAuthAppClientIdFromEnv = $easyAuthAppClientIdValue
+  }
+  if (-not [string]::IsNullOrWhiteSpace($easyAuthAppDisplayNameValue)) {
+    $easyAuthAppDisplayName = $easyAuthAppDisplayNameValue
+  }
+}
 
 Write-Host 'Running postprovision runbook validation...'
 
@@ -134,8 +172,13 @@ if ($webAppResource) {
     $easyAuthIssuer = $auth.properties.identityProviders.azureActiveDirectory.registration.openIdIssuer
   }
 }
+$effectiveEasyAuthClientId = if ($easyAuthClientId -and $easyAuthClientId -ne 'n/a') { $easyAuthClientId } else { $easyAuthAppClientIdFromEnv }
 $summaryLines += "Easy Auth clientId: $easyAuthClientId"
 $summaryLines += "Easy Auth issuer: $easyAuthIssuer"
+$summaryLines += "Easy Auth Entra app objectId: $easyAuthAppObjectId"
+$summaryLines += "Easy Auth Entra app display name: $easyAuthAppDisplayName"
+$summaryLines += "Easy Auth Entra app clientId (azd env): $easyAuthAppClientIdFromEnv"
+$summaryLines += "Easy Auth effective clientId: $effectiveEasyAuthClientId"
 $summaryLines += ""
 $summaryLines += '## Resources Created'
 $summaryLines += "- Automation Account: $(if ($automationResource) { $automationResource.name } else { 'not found' })"
