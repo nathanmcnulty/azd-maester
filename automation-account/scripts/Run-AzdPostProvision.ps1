@@ -140,7 +140,7 @@ $storageResource = $resources | Where-Object { $_.type -eq 'Microsoft.Storage/st
 $webAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' } | Select-Object -First 1
 $planResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/serverfarms' } | Select-Object -First 1
 $includeWebAppEffective = [bool]$webAppResource
-$deploymentModeEffective = if ($includeWebAppEffective) { 'advanced' } else { 'quick' }
+$deploymentModeEffective = if ($includeWebAppEffective) { 'webapp' } else { 'quick' }
 
 $summaryDir = Join-Path -Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path -ChildPath 'outputs'
 if (-not (Test-Path -Path $summaryDir)) {

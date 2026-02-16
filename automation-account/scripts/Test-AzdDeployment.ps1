@@ -52,13 +52,11 @@ else {
 $automationAccountName = "aa-$($EnvironmentName.ToLower())"
 
 Write-Host 'Step 1/5: Initialize azd environment defaults'
-$deploymentMode = if ($IncludeWebApp) { 'Advanced' } else { 'Quick' }
 & "$PSScriptRoot\Initialize-AzdEnvironment.ps1" `
   -EnvironmentName $EnvironmentName `
   -SubscriptionId $SubscriptionId `
   -Location $Location `
   -ResourceGroupName $resourceGroupName `
-  -DeploymentMode $deploymentMode `
   -IncludeWebApp $IncludeWebApp `
   -WebAppSku $WebAppSku `
   -PermissionProfile $PermissionProfile `

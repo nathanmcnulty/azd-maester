@@ -20,7 +20,7 @@ After `azd init -t <your-template-id>`, choose a folder:
 
 - `automation-account`
   - `cd automation-account`
-  - `./scripts/Start-Setup.ps1 -DeploymentMode Advanced -SecurityGroupObjectId <groupObjectId>`
+  - `./scripts/Start-Setup.ps1 -WebApp -SecurityGroupObjectId <groupObjectId>`
 - `container-app-job`
   - `cd container-app-job`
   - `azd provision`

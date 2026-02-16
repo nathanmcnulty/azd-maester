@@ -5,17 +5,17 @@ Deploys a production-style Maester automation solution on Azure with:
 - Azure Automation (PowerShell 7.4 runtime)
 - Managed identity + Graph permissions
 - Storage-backed report history (`archive`) and latest pointer (`latest/latest.html`)
-- Optional App Service + Easy Auth portal in Advanced mode
+- Optional App Service + Easy Auth portal in WebApp mode
 
 ## Quickstart (recommended)
 
 After `azd init -t <your-template-id>` and `cd automation-account`, run one command:
 
-`./scripts/Start-Setup.ps1 -DeploymentMode Advanced -SecurityGroupObjectId <groupObjectId>`
+`./scripts/Start-Setup.ps1 -WebApp -SecurityGroupObjectId <groupObjectId>`
 
-For quick mode (no web app):
+For quick mode (no web app), run with no mode flags:
 
-`./scripts/Start-Setup.ps1 -DeploymentMode Quick`
+`./scripts/Start-Setup.ps1`
 
 What this does:
 
@@ -28,7 +28,7 @@ What this does:
 ## Modes
 
 - **Quick**: Automation + Storage
-- **Advanced**: Quick + Web App (Entra auth restricted by security group)
+- **WebApp**: Quick + Web App (Entra auth restricted by security group)
 
 Defaults:
 
@@ -60,7 +60,7 @@ Defaults:
 - Outputs:
   - `archive/maester-report-<timestamp>.html.gz`
   - `latest/latest.html`
-- In Advanced mode, latest report is published to Web App `index.html`
+- In WebApp mode, latest report is published to Web App `index.html`
 - Entra auth via app registration + admin consent are configured automatically
 - Signed-in deployment user is granted `Storage Blob Data Reader` on the solution storage account
 - Blob soft delete is enabled for 1 day, with blob versioning disabled
