@@ -13,10 +13,8 @@ param(
   [string]$ResourceGroupName,
 
   [Parameter(Mandatory = $false)]
-  [switch]$WebApp,
-
-  [Parameter(Mandatory = $false)]
-  [bool]$IncludeWebApp,
+  [Alias('WebApp')]
+  [switch]$IncludeWebApp,
 
   [Parameter(Mandatory = $false)]
   [string]$WebAppSku = 'F1',
@@ -39,7 +37,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 if (-not $PSBoundParameters.ContainsKey('IncludeWebApp')) {
-  $IncludeWebApp = [bool]$WebApp
+  $IncludeWebApp = $false
 }
 
 if (-not $PSBoundParameters.ContainsKey('PermissionProfile') -or [string]::IsNullOrWhiteSpace($PermissionProfile)) {

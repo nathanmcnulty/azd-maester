@@ -11,7 +11,7 @@ Deploys a production-style Maester automation solution on Azure with:
 
 After `azd init -t <your-template-id>` and `cd automation-account`, run one command:
 
-`./scripts/Start-Setup.ps1 -WebApp -SecurityGroupObjectId <groupObjectId>`
+`./scripts/Start-Setup.ps1 -IncludeWebApp -SecurityGroupObjectId <groupObjectId>`
 
 For quick mode (no web app), run with no mode flags:
 

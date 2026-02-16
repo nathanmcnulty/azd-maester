@@ -13,7 +13,8 @@ param(
   [string]$ResourceGroupName,
 
   [Parameter(Mandatory = $false)]
-  [switch]$WebApp,
+  [Alias('WebApp')]
+  [switch]$IncludeWebApp,
 
   [Parameter(Mandatory = $false)]
   [string]$SecurityGroupObjectId,
@@ -32,8 +33,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if ($WebApp -and [string]::IsNullOrWhiteSpace($SecurityGroupObjectId)) {
-  throw 'SecurityGroupObjectId is required when -WebApp is specified.'
+if ($IncludeWebApp -and [string]::IsNullOrWhiteSpace($SecurityGroupObjectId)) {
+  throw 'SecurityGroupObjectId is required when -IncludeWebApp is specified.'
 }
 
 function Test-CommandExists {
@@ -132,7 +133,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tenantId)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($EnvironmentName)) {
-  $modePrefix = if ($WebApp) { 'maesterweb' } else { 'maesterqk' }
+  $modePrefix = if ($IncludeWebApp) { 'maesterweb' } else { 'maesterqk' }
   $EnvironmentName = "{0}{1}" -f $modePrefix, (Get-Random -Minimum 1000 -Maximum 9999)
   Write-Host "Environment name not provided. Using generated name: $EnvironmentName"
 }
@@ -150,7 +151,7 @@ $initializeArgs = @{
   SubscriptionId    = $effectiveSubscriptionId
   Location          = $Location
   ResourceGroupName = $effectiveResourceGroupName
-  IncludeWebApp     = [bool]$WebApp
+  IncludeWebApp     = [bool]$IncludeWebApp
   WebAppSku         = $WebAppSku
   PermissionProfile = $PermissionProfile
   TenantId          = $tenantId

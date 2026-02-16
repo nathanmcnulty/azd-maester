@@ -16,7 +16,8 @@ param(
   [string]$ResourceGroupName,
 
   [Parameter(Mandatory = $false)]
-  [bool]$IncludeWebApp = $true,
+  [Alias('WebApp')]
+  [switch]$IncludeWebApp,
 
   [Parameter(Mandatory = $false)]
   [string]$WebAppSku = 'F1',
@@ -57,7 +58,7 @@ Write-Host 'Step 1/5: Initialize azd environment defaults'
   -SubscriptionId $SubscriptionId `
   -Location $Location `
   -ResourceGroupName $resourceGroupName `
-  -IncludeWebApp $IncludeWebApp `
+  -IncludeWebApp:$IncludeWebApp `
   -WebAppSku $WebAppSku `
   -PermissionProfile $PermissionProfile `
   -SecurityGroupObjectId $SecurityGroupObjectId
