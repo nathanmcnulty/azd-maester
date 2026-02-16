@@ -1,0 +1,13 @@
+﻿name: maester-automation-account
+metadata:
+  template: maester-automation-account@0.0.1
+infra:
+  provider: bicep
+  path: infra
+hooks:
+  preprovision:
+    shell: pwsh
+    run: ./scripts/Run-AzdPreProvision.ps1
+  postprovision:
+    shell: pwsh
+    run: ./scripts/Run-AzdPostProvision.ps1

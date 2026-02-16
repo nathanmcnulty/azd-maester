@@ -1,0 +1,172 @@
+﻿[CmdletBinding()]
+param(
+  [Parameter(Mandatory = $false)]
+  [string]$SubscriptionId,
+
+  [Parameter(Mandatory = $false)]
+  [string]$TenantId,
+
+  [Parameter(Mandatory = $false)]
+  [string]$EnvironmentName,
+
+  [Parameter(Mandatory = $false)]
+  [string]$ResourceGroupName,
+
+  [Parameter(Mandatory = $false)]
+  [string]$SecurityGroupObjectId,
+
+  [Parameter(Mandatory = $false)]
+  [string]$SecurityGroupDisplayName,
+
+  [Parameter(Mandatory = $false)]
+  [ValidateSet('Minimal', 'Extended')]
+  [string]$PermissionProfile = 'Extended'
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+Import-Module Az.Accounts -Force
+
+if (-not $SubscriptionId) {
+  $SubscriptionId = $env:AZURE_SUBSCRIPTION_ID
+}
+if (-not $TenantId -and $env:AZURE_TENANT_ID) {
+  $TenantId = $env:AZURE_TENANT_ID
+}
+if (-not $EnvironmentName) {
+  $EnvironmentName = if ($env:AZURE_ENV_NAME) { $env:AZURE_ENV_NAME } else { 'dev' }
+}
+if (-not $ResourceGroupName) {
+  $ResourceGroupName = if ($env:AZURE_RESOURCE_GROUP) { $env:AZURE_RESOURCE_GROUP } else { "rg-$EnvironmentName" }
+}
+if (-not $SecurityGroupObjectId) {
+  if ($env:SECURITY_GROUP_OBJECT_ID) {
+    $SecurityGroupObjectId = $env:SECURITY_GROUP_OBJECT_ID
+  }
+  elseif ($env:EASY_AUTH_SECURITY_GROUP_OBJECT_ID) {
+    $SecurityGroupObjectId = $env:EASY_AUTH_SECURITY_GROUP_OBJECT_ID
+  }
+}
+if (-not $SecurityGroupDisplayName -and $env:SECURITY_GROUP_DISPLAY_NAME) {
+  $SecurityGroupDisplayName = $env:SECURITY_GROUP_DISPLAY_NAME
+}
+if (-not $PSBoundParameters.ContainsKey('PermissionProfile') -and $env:PERMISSION_PROFILE) {
+  $PermissionProfile = $env:PERMISSION_PROFILE
+}
+
+Write-Host 'Running postprovision setup...'
+
+$setupParams = @{
+  SubscriptionId    = $SubscriptionId
+  EnvironmentName   = $EnvironmentName
+  ResourceGroupName = $ResourceGroupName
+  PermissionProfile = $PermissionProfile
+}
+if ($TenantId) {
+  $setupParams['TenantId'] = $TenantId
+}
+if ($SecurityGroupObjectId) {
+  $setupParams['SecurityGroupObjectId'] = $SecurityGroupObjectId
+}
+if ($SecurityGroupDisplayName) {
+  $setupParams['SecurityGroupDisplayName'] = $SecurityGroupDisplayName
+}
+
+& "$PSScriptRoot\Setup-PostDeploy.ps1" @setupParams
+
+Write-Host 'Running postprovision runbook validation...'
+
+$automationAccountName = "aa-$($EnvironmentName.ToLower())"
+$testParams = @{
+  SubscriptionId       = $SubscriptionId
+  ResourceGroupName    = $ResourceGroupName
+  AutomationAccountName = $automationAccountName
+  RunbookName          = 'maester-runbook'
+}
+if ($TenantId) {
+  $testParams['TenantId'] = $TenantId
+}
+
+$testParams['PassThru'] = $true
+
+$validationResult = & "$PSScriptRoot\Invoke-RunbookValidation.ps1" @testParams
+
+$resourcesPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/resources?api-version=2021-04-01"
+$resourcesPayload = (Invoke-AzRestMethod -Method GET -Path $resourcesPath).Content | ConvertFrom-Json
+$resources = @($resourcesPayload.value)
+$customDnsDocsUrl = 'https://learn.microsoft.com/azure/app-service/app-service-web-tutorial-custom-domain'
+
+$automationResource = $resources | Where-Object { $_.type -eq 'Microsoft.Automation/automationAccounts' } | Select-Object -First 1
+$storageResource = $resources | Where-Object { $_.type -eq 'Microsoft.Storage/storageAccounts' } | Select-Object -First 1
+$webAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' } | Select-Object -First 1
+$planResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/serverfarms' } | Select-Object -First 1
+$includeWebAppEffective = [bool]$webAppResource
+$deploymentModeEffective = if ($includeWebAppEffective) { 'advanced' } else { 'quick' }
+
+$summaryDir = Join-Path -Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path -ChildPath 'outputs'
+if (-not (Test-Path -Path $summaryDir)) {
+  New-Item -Path $summaryDir -ItemType Directory -Force | Out-Null
+}
+
+$summaryPath = Join-Path -Path $summaryDir -ChildPath ("{0}-setup-summary.md" -f $EnvironmentName)
+$summaryLines = @()
+$summaryLines += '# Deployment and Validation Summary'
+$summaryLines += ""
+$summaryLines += "Generated: $(Get-Date -Format u)"
+$summaryLines += "Environment: $EnvironmentName"
+$summaryLines += "Subscription: $SubscriptionId"
+$summaryLines += "Resource group: $ResourceGroupName"
+$summaryLines += "Deployment mode: $deploymentModeEffective"
+$summaryLines += "Include web app: $($includeWebAppEffective.ToString().ToLower())"
+$summaryLines += "Permission profile: $PermissionProfile"
+$summaryLines += "Security group object id: $(if ($SecurityGroupObjectId) { $SecurityGroupObjectId } else { 'n/a' })"
+$summaryLines += "Security group display name: $(if ($SecurityGroupDisplayName) { $SecurityGroupDisplayName } else { 'n/a' })"
+$easyAuthClientId = 'n/a'
+$easyAuthIssuer = 'n/a'
+if ($webAppResource) {
+  $authPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$($webAppResource.name)/config/authsettingsV2?api-version=2023-12-01"
+  $auth = (Invoke-AzRestMethod -Method GET -Path $authPath).Content | ConvertFrom-Json
+  if ($auth.properties.identityProviders.azureActiveDirectory.registration.clientId) {
+    $easyAuthClientId = $auth.properties.identityProviders.azureActiveDirectory.registration.clientId
+  }
+  if ($auth.properties.identityProviders.azureActiveDirectory.registration.openIdIssuer) {
+    $easyAuthIssuer = $auth.properties.identityProviders.azureActiveDirectory.registration.openIdIssuer
+  }
+}
+$summaryLines += "Easy Auth clientId: $easyAuthClientId"
+$summaryLines += "Easy Auth issuer: $easyAuthIssuer"
+$summaryLines += ""
+$summaryLines += '## Resources Created'
+$summaryLines += "- Automation Account: $(if ($automationResource) { $automationResource.name } else { 'not found' })"
+$summaryLines += "- Storage Account: $(if ($storageResource) { $storageResource.name } else { 'not found' })"
+$summaryLines += "- App Service Plan: $(if ($planResource) { $planResource.name } else { 'not deployed' })"
+$summaryLines += "- Web App: $(if ($webAppResource) { $webAppResource.name } else { 'not deployed' })"
+$summaryLines += ""
+$summaryLines += '## How Components Interoperate'
+$summaryLines += '- Automation runbook executes Maester tests on the weekly schedule and on-demand validation runs.'
+$summaryLines += '- Automation managed identity calls Microsoft Graph using the configured permission profile.'
+$summaryLines += '- Automation managed identity uploads gzip-compressed dated reports to storage container `archive` and `latest.html` to `latest`.'
+if ($webAppResource) {
+  $summaryLines += '- Web App hosts the latest dashboard experience and is protected by Easy Auth + Entra security group restriction.'
+  $summaryLines += "- Optional custom DNS setup guidance: $customDnsDocsUrl"
+}
+else {
+  $summaryLines += '- Web App is not deployed in quick mode; reports remain available through storage-backed workflow.'
+}
+$summaryLines += ""
+$summaryLines += '## Validation Results'
+$summaryLines += "- Runbook validation status: $(if ($validationResult.ValidationPassed) { 'Passed' } else { 'Failed' })"
+$summaryLines += "- Runbook job id: $($validationResult.JobId)"
+$summaryLines += "- Runbook final status: $($validationResult.FinalStatus)"
+$summaryLines += "- Validation completed at: $($validationResult.CompletedAt)"
+
+Set-Content -Path $summaryPath -Value ($summaryLines -join [Environment]::NewLine) -Encoding utf8
+
+Write-Host "Deployment summary written to: $summaryPath"
+
+if ($webAppResource) {
+  Write-Host "Optional custom DNS setup guide: $customDnsDocsUrl"
+}
+
+Write-Host 'azd postprovision automation completed successfully.'
