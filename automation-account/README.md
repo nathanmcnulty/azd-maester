@@ -17,6 +17,37 @@ For quick mode (no web app), run with no mode flags:
 
 `./scripts/Start-Setup.ps1`
 
+## Advanced options (optional)
+
+You can optionally enable additional data collection/connectivity for Maester by enabling one or more `-Include*` switches during setup.
+
+- `-IncludeExchange`
+  - Installs `ExchangeOnlineManagement` into the Automation runtime.
+  - Grants the Automation Account managed identity the Exchange app permission required for app-only Exchange Online access.
+  - Creates/links an Exchange service principal for the managed identity and assigns the Exchange RBAC role `View-Only Configuration` (best-effort).
+- `-IncludeTeams`
+  - Installs `MicrosoftTeams` into the Automation runtime.
+  - Assigns the Entra directory role `Teams Reader` to the Automation Account managed identity.
+- `-IncludeAzure`
+  - Grants Azure RBAC `Reader` to the Automation Account managed identity at one or more scopes.
+  - Scopes can be management groups and/or subscriptions.
+
+Examples:
+
+- Enable Exchange + Teams:
+  - `./scripts/Start-Setup.ps1 -IncludeExchange -IncludeTeams`
+- Enable Azure and select scopes interactively:
+  - `./scripts/Start-Setup.ps1 -IncludeAzure`
+- Enable Azure with explicit scopes:
+  - `./scripts/Start-Setup.ps1 -IncludeAzure -AzureScopes '/providers/Microsoft.Management/managementGroups/<mgName>','/subscriptions/<subId>'`
+
+### Permission behavior
+
+- Advanced permission steps are performed using the privileges of the user running setup.
+- If a step fails due to missing privileges, the scripts will:
+  - Prompt you to **Stop** or **Skip** in interactive runs.
+  - Default to **Skip + continue** in non-interactive runs (CI).
+
 What this does:
 
 - signs in with Azure CLI if needed
@@ -44,6 +75,16 @@ Defaults:
   `./scripts/Remove-AzdEnvironment.ps1 -EnvironmentName <env>`
 - Remove Azure resources but keep local azd env:
   `./scripts/Remove-AzdEnvironment.ps1 -EnvironmentName <env> -KeepEnvironment`
+
+### Cleanup details
+
+`Remove-AzdEnvironment.ps1` performs best-effort cleanup for tenant/scope-level assignments created by advanced options before running `azd down`, including:
+
+- Teams directory role assignments (`Teams Reader`) created by this environment
+- Azure RBAC role assignments created by this environment (at selected scopes)
+- Exchange Online permissions/assignments created by this environment (best-effort)
+
+The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked assignment IDs used for cleanup.
 
 ## Script map
 

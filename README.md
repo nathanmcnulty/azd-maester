@@ -21,6 +21,7 @@ After `azd init -t <your-template-id>`, choose a folder:
 - `automation-account`
   - `cd automation-account`
   - `./scripts/Start-Setup.ps1 -IncludeWebApp -SecurityGroupObjectId <groupObjectId>`
+  - Optional: add `-IncludeExchange`, `-IncludeTeams`, and/or `-IncludeAzure` for additional data collection.
 - `container-app-job`
   - `cd container-app-job`
   - `azd provision`

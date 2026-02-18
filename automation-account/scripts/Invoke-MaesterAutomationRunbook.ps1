@@ -21,6 +21,25 @@
 $ErrorActionPreference = 'Stop'
 $ConfirmPreference = 'None'
 
+function ConvertTo-BoolOrDefault {
+  param(
+    [Parameter(Mandatory = $false)]
+    [string]$Value,
+    [Parameter(Mandatory = $true)]
+    [bool]$Default
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $Default
+  }
+
+  switch ($Value.Trim().ToLower()) {
+    'true' { return $true }
+    'false' { return $false }
+    default { return $Default }
+  }
+}
+
 function Get-PlainToken {
   param([Parameter(Mandatory = $true)][string]$ResourceUrl)
 
@@ -91,31 +110,11 @@ function Publish-WebAppContent {
     [Parameter(Mandatory = $true)][string]$SourcePath
   )
 
-  $context = Get-AzContext
-  if (-not $context -or -not $context.Subscription -or -not $context.Subscription.Id) {
-    throw 'Unable to resolve Azure subscription context while publishing Web App content.'
-  }
-
-  $subscriptionId = $context.Subscription.Id
+  # Use ARM bearer token for Kudu VFS API (works with SCM basic auth disabled)
   $armToken = Get-PlainToken -ResourceUrl 'https://management.azure.com/'
-  $armHeaders = @{
-    'Authorization' = "Bearer $armToken"
-    'Content-Type' = 'application/json'
-  }
-
-  $publishingUri = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$AppResourceGroupName/providers/Microsoft.Web/sites/$AppName/config/publishingcredentials/list?api-version=2023-12-01"
-  $publishingResponse = Invoke-RestMethod -Method Post -Uri $publishingUri -Headers $armHeaders -Body '{}'
-  $publishingUserName = $publishingResponse.properties.publishingUserName
-  $publishingPassword = $publishingResponse.properties.publishingPassword
-
-  if ([string]::IsNullOrWhiteSpace($publishingUserName) -or [string]::IsNullOrWhiteSpace($publishingPassword)) {
-    throw "Publishing credentials were not returned for Web App '$AppName'."
-  }
-
-  $basicAuthValue = [Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes("$publishingUserName`:$publishingPassword"))
   $kuduHeaders = @{
-    'Authorization' = "Basic $basicAuthValue"
-    'If-Match' = '*'
+    'Authorization' = "Bearer $armToken"
+    'If-Match'      = '*'
   }
 
   $kuduUri = "https://$AppName.scm.azurewebsites.net/api/vfs/site/wwwroot/index.html"
@@ -133,6 +132,120 @@ Import-Module Pester -Force
 
 Connect-AzAccount -Identity | Out-Null
 Connect-MgGraph -Identity -NoWelcome | Out-Null
+
+$tenantId = $null
+try {
+  $ctx = Get-MgContext
+  if ($ctx -and $ctx.TenantId) {
+    $tenantId = $ctx.TenantId
+  }
+}
+catch {
+}
+
+$includeExchange = $false
+$includeTeams = $false
+$includeAzure = $false
+
+try {
+  $includeExchange = ConvertTo-BoolOrDefault -Value (Get-AutomationVariable -Name 'IncludeExchange') -Default $false
+}
+catch {
+}
+
+try {
+  $includeTeams = ConvertTo-BoolOrDefault -Value (Get-AutomationVariable -Name 'IncludeTeams') -Default $false
+}
+catch {
+}
+
+try {
+  $includeAzure = ConvertTo-BoolOrDefault -Value (Get-AutomationVariable -Name 'IncludeAzure') -Default $false
+}
+catch {
+}
+
+$moera = $null
+if ($includeExchange) {
+  Write-Output 'IncludeExchange enabled. Attempting Exchange Online connection using managed identity.'
+  try {
+    Import-Module ExchangeOnlineManagement -Force
+
+    # Resolve tenant initial domain (MOERA) for Organization parameter
+    try {
+      $domains = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains'
+      if ($domains -and $domains.value) {
+        $initial = @($domains.value | Where-Object { $_.isInitial -eq $true }) | Select-Object -First 1
+        if ($initial -and $initial.id) {
+          $moera = $initial.id
+        }
+      }
+    }
+    catch {
+    }
+
+    try {
+      Connect-ExchangeOnline -ManagedIdentity -ShowBanner:$false | Out-Null
+    }
+    catch {
+      if ($moera) {
+        Connect-ExchangeOnline -ManagedIdentity -Organization $moera -ShowBanner:$false | Out-Null
+      }
+      else {
+        throw
+      }
+    }
+
+    Write-Output 'Exchange Online connection established.'
+
+    # Connect to Security & Compliance PowerShell (IPPS) using managed identity
+    try {
+      $ippsConnectionUri = 'https://ps.compliance.protection.outlook.com/powershell-liveid/'
+      $ippsConnectArgs = @{
+        ManagedIdentity = $true
+        ConnectionUri   = $ippsConnectionUri
+        ShowBanner      = $false
+      }
+      if ($moera) {
+        $ippsConnectArgs['Organization'] = $moera
+      }
+      Connect-ExchangeOnline @ippsConnectArgs | Out-Null
+      Write-Output 'Security & Compliance (IPPS) connection established.'
+    }
+    catch {
+      Write-Warning ("Security & Compliance (IPPS) connection failed. Compliance-related tests may be skipped. Error: {0}" -f $_.Exception.Message)
+    }
+  }
+  catch {
+    Write-Warning ("Exchange Online connection failed. Exchange-related tests may be skipped. Error: {0}" -f $_.Exception.Message)
+  }
+}
+
+if ($includeTeams) {
+  Write-Output 'IncludeTeams enabled. Attempting Microsoft Teams connection using managed identity.'
+  try {
+    Import-Module MicrosoftTeams -Force
+    try {
+      Connect-MicrosoftTeams -Identity | Out-Null
+    }
+    catch {
+      if ($tenantId) {
+        Connect-MicrosoftTeams -Identity -TenantId $tenantId | Out-Null
+      }
+      else {
+        throw
+      }
+    }
+    Write-Output 'Microsoft Teams connection established.'
+  }
+  catch {
+    Write-Warning ("Microsoft Teams connection failed. Teams-related tests may be skipped. Error: {0}" -f $_.Exception.Message)
+  }
+}
+
+if ($includeAzure) {
+  Write-Output 'IncludeAzure enabled. Azure connection is already established via Connect-AzAccount -Identity.'
+}
 
 if (-not $StorageAccountName) {
   try {

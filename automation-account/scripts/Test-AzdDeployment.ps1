@@ -142,6 +142,24 @@ if (-not $runtime74) {
   throw 'Custom PowerShell 7.4 runtime environment PowerShell-74-Maester was not found.'
 }
 
+$packagesPath = "/subscriptions/$SubscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runtimeEnvironments/PowerShell-74-Maester/packages?api-version=2024-10-23"
+$packages = (Invoke-AzRestMethod -Method GET -Path $packagesPath).Content | ConvertFrom-Json
+$packageNames = @($packages.value.name)
+$requiredPackages = @('ExchangeOnlineManagement', 'MicrosoftTeams')
+$missingPackages = @($requiredPackages | Where-Object { $_ -notin $packageNames })
+if ($missingPackages.Count -gt 0) {
+  throw "Missing required Automation runtime packages: $($missingPackages -join ', ')"
+}
+
+$variablesPath = "/subscriptions/$SubscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/variables?api-version=2023-11-01"
+$variables = (Invoke-AzRestMethod -Method GET -Path $variablesPath).Content | ConvertFrom-Json
+$variableNames = @($variables.value.name)
+$requiredVariables = @('IncludeExchange', 'IncludeTeams', 'IncludeAzure', 'AzureRbacScopes')
+$missingVariables = @($requiredVariables | Where-Object { $_ -notin $variableNames })
+if ($missingVariables.Count -gt 0) {
+  throw "Missing required Automation variables: $($missingVariables -join ', ')"
+}
+
 $runbookPath = "/subscriptions/$SubscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/maester-runbook?api-version=2024-10-23"
 $runbook = (Invoke-AzRestMethod -Method GET -Path $runbookPath).Content | ConvertFrom-Json
 if ($runbook.properties.runtimeEnvironment -ne 'PowerShell-74-Maester') {

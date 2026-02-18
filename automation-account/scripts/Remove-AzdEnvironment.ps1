@@ -43,6 +43,76 @@ function Clear-AzdEnvironmentValue {
   Write-Host "Cleared azd environment value '$Name'."
 }
 
+function Test-CanPrompt {
+  try {
+    $null = $Host.UI.RawUI
+    return $true
+  }
+  catch {
+    return $false
+  }
+}
+
+function ConvertFrom-JsonArrayOrEmpty {
+  param(
+    [Parameter(Mandatory = $false)]
+    [string]$Json
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Json)) {
+    return @()
+  }
+
+  $text = $Json.Trim()
+  if (-not $text.StartsWith('[')) {
+    return @($text -split ';' | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  }
+
+  try {
+    $parsed = $text | ConvertFrom-Json
+    if (-not $parsed) {
+      return @()
+    }
+
+    if ($parsed -is [string]) {
+      return @($parsed)
+    }
+
+    return @($parsed)
+  }
+  catch {
+    Write-Warning "Failed to parse JSON array value. Skipping. Value: $Json"
+    return @()
+  }
+}
+
+function Ensure-ModuleAvailable {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$ModuleName
+  )
+
+  $available = Get-Module -ListAvailable -Name $ModuleName | Select-Object -First 1
+  if ($available) {
+    Import-Module $ModuleName -Force
+    return $true
+  }
+
+  if (-not (Test-CanPrompt)) {
+    Write-Warning "$ModuleName is not installed and this is a non-interactive session."
+    return $false
+  }
+
+  $installChoice = Read-Host "Install PowerShell module '$ModuleName' now? (Y/N)"
+  if (-not $installChoice -or $installChoice.Trim().ToUpper() -ne 'Y') {
+    return $false
+  }
+
+  Install-Module -Name $ModuleName -Scope CurrentUser -Force -AllowClobber
+  Import-Module $ModuleName -Force
+  return $true
+}
+
 function Remove-WebAppEasyAuthEntraApplications {
   param(
     [Parameter(Mandatory = $true)]
@@ -197,12 +267,102 @@ $resourceGroupName = $null
 $subscriptionId = $null
 $easyAuthAppObjectId = $null
 $easyAuthAppClientId = $null
+$automationMiPrincipalId = $null
+$teamsRoleAssignmentIdsJson = $null
+$azureRoleAssignmentIdsJson = $null
+$exoAppRoleAssignmentIdsJson = $null
+$exoServicePrincipalDisplayName = $null
 $envValues = & azd env get-values
 if ($LASTEXITCODE -eq 0) {
   $resourceGroupName = Get-EnvValue -Lines $envValues -Name 'AZURE_RESOURCE_GROUP'
   $subscriptionId = Get-EnvValue -Lines $envValues -Name 'AZURE_SUBSCRIPTION_ID'
   $easyAuthAppObjectId = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID'
   $easyAuthAppClientId = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_CLIENT_ID'
+  $automationMiPrincipalId = Get-EnvValue -Lines $envValues -Name 'AUTOMATION_MI_PRINCIPAL_ID'
+  $teamsRoleAssignmentIdsJson = Get-EnvValue -Lines $envValues -Name 'TEAMS_READER_ROLE_ASSIGNMENT_IDS'
+  $azureRoleAssignmentIdsJson = Get-EnvValue -Lines $envValues -Name 'AZURE_ROLE_ASSIGNMENT_IDS'
+  $exoAppRoleAssignmentIdsJson = Get-EnvValue -Lines $envValues -Name 'EXO_APPROLE_ASSIGNMENT_IDS'
+  $exoServicePrincipalDisplayName = Get-EnvValue -Lines $envValues -Name 'EXO_SERVICE_PRINCIPAL_DISPLAY_NAME'
+}
+
+$teamsRoleAssignmentIds = ConvertFrom-JsonArrayOrEmpty -Json $teamsRoleAssignmentIdsJson
+$azureRoleAssignmentIds = ConvertFrom-JsonArrayOrEmpty -Json $azureRoleAssignmentIdsJson
+$exoAppRoleAssignmentIds = ConvertFrom-JsonArrayOrEmpty -Json $exoAppRoleAssignmentIdsJson
+
+if (@($teamsRoleAssignmentIds).Count -gt 0) {
+  Write-Host 'Removing Teams Reader Entra role assignments created by this environment...'
+  foreach ($assignmentId in @($teamsRoleAssignmentIds)) {
+    if ([string]::IsNullOrWhiteSpace($assignmentId)) {
+      continue
+    }
+
+    & az rest --method delete --url "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments/$assignmentId" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "Failed to remove Teams Reader role assignment id '$assignmentId'."
+    }
+  }
+}
+
+
+if (@($azureRoleAssignmentIds).Count -gt 0) {
+  Write-Host 'Removing Azure RBAC role assignments created by this environment...'
+  foreach ($roleAssignmentId in @($azureRoleAssignmentIds)) {
+    if ([string]::IsNullOrWhiteSpace($roleAssignmentId)) {
+      continue
+    }
+
+    & az role assignment delete --ids $roleAssignmentId | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "Failed to remove Azure RBAC role assignment id '$roleAssignmentId'."
+    }
+  }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($automationMiPrincipalId) -and @($exoAppRoleAssignmentIds).Count -gt 0) {
+  Write-Host 'Removing Exchange appRoleAssignments created by this environment...'
+  foreach ($assignmentId in @($exoAppRoleAssignmentIds)) {
+    if ([string]::IsNullOrWhiteSpace($assignmentId)) {
+      continue
+    }
+
+    & az rest --method delete --url "https://graph.microsoft.com/v1.0/servicePrincipals/$automationMiPrincipalId/appRoleAssignments/$assignmentId" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "Failed to remove Exchange appRoleAssignment id '$assignmentId'."
+    }
+  }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($exoServicePrincipalDisplayName)) {
+  Write-Host "Attempting Exchange RBAC cleanup for '$exoServicePrincipalDisplayName' (best-effort)..."
+  try {
+    if (Ensure-ModuleAvailable -ModuleName 'ExchangeOnlineManagement') {
+      Connect-ExchangeOnline -ShowBanner:$false | Out-Null
+      try {
+        $assignments = Get-ManagementRoleAssignment -RoleAssignee $exoServicePrincipalDisplayName -ErrorAction SilentlyContinue
+        foreach ($assignment in @($assignments)) {
+          if ($assignment.Role -ne 'View-Only Configuration') {
+            continue
+          }
+          Remove-ManagementRoleAssignment -Identity $assignment.Identity -Confirm:$false -ErrorAction SilentlyContinue
+        }
+      }
+      catch {
+        Write-Warning ("Failed to remove Exchange management role assignments. Error: {0}" -f $_.Exception.Message)
+      }
+
+      try {
+        Remove-ServicePrincipal -Identity $exoServicePrincipalDisplayName -Confirm:$false -ErrorAction SilentlyContinue
+      }
+      catch {
+      }
+    }
+    else {
+      Write-Warning 'ExchangeOnlineManagement module is not available. Skipping Exchange RBAC cleanup.'
+    }
+  }
+  catch {
+    Write-Warning ("Exchange RBAC cleanup encountered an error. Skipping. Error: {0}" -f $_.Exception.Message)
+  }
 }
 
 if (-not [string]::IsNullOrWhiteSpace($resourceGroupName)) {
@@ -235,11 +395,38 @@ if ($LASTEXITCODE -ne 0) {
   throw 'azd down failed.'
 }
 
+if (-not $KeepEnvironment) {
+  try {
+    $localEnvPath = Join-Path -Path (Join-Path $projectRoot '.azure') -ChildPath $EnvironmentName
+    if (Test-Path -Path $localEnvPath) {
+      Remove-Item -Path $localEnvPath -Recurse -Force -ErrorAction Stop
+      Write-Host "Removed local azd environment folder: $localEnvPath"
+    }
+  }
+  catch {
+    Write-Warning "Failed to remove local azd environment folder for '$EnvironmentName'. Error: $($_.Exception.Message)"
+  }
+}
+
 if ($KeepEnvironment) {
   Write-Host 'Clearing Easy Auth Entra app metadata from kept azd environment...'
   Clear-AzdEnvironmentValue -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID'
   Clear-AzdEnvironmentValue -Name 'EASY_AUTH_ENTRA_APP_CLIENT_ID'
   Clear-AzdEnvironmentValue -Name 'EASY_AUTH_ENTRA_APP_DISPLAY_NAME'
+
+  Write-Host 'Clearing advanced include and assignment metadata from kept azd environment...'
+  Clear-AzdEnvironmentValue -Name 'INCLUDE_EXCHANGE'
+  Clear-AzdEnvironmentValue -Name 'INCLUDE_TEAMS'
+  Clear-AzdEnvironmentValue -Name 'INCLUDE_AZURE'
+  Clear-AzdEnvironmentValue -Name 'AZURE_RBAC_SCOPES'
+  Clear-AzdEnvironmentValue -Name 'SETUP_EXCHANGE_STATUS'
+  Clear-AzdEnvironmentValue -Name 'SETUP_TEAMS_STATUS'
+  Clear-AzdEnvironmentValue -Name 'SETUP_AZURE_STATUS'
+  Clear-AzdEnvironmentValue -Name 'EXO_APPROLE_ASSIGNMENT_IDS'
+  Clear-AzdEnvironmentValue -Name 'TEAMS_READER_ROLE_ASSIGNMENT_IDS'
+  Clear-AzdEnvironmentValue -Name 'AZURE_ROLE_ASSIGNMENT_IDS'
+  Clear-AzdEnvironmentValue -Name 'EXO_SERVICE_PRINCIPAL_DISPLAY_NAME'
+  Clear-AzdEnvironmentValue -Name 'AUTOMATION_MI_PRINCIPAL_ID'
 }
 
 Write-Host "Environment removal completed for '$EnvironmentName'."

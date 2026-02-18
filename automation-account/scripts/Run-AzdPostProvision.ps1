@@ -96,6 +96,17 @@ if ($SecurityGroupDisplayName) {
 $easyAuthAppObjectId = 'n/a'
 $easyAuthAppClientIdFromEnv = 'n/a'
 $easyAuthAppDisplayName = 'n/a'
+$includeExchangeFromEnv = 'n/a'
+$includeTeamsFromEnv = 'n/a'
+$includeAzureFromEnv = 'n/a'
+$azureScopesFromEnv = 'n/a'
+$exchangeSetupStatusFromEnv = 'n/a'
+$teamsSetupStatusFromEnv = 'n/a'
+$azureSetupStatusFromEnv = 'n/a'
+$exoAppRoleAssignmentIdsFromEnv = 'n/a'
+$teamsRoleAssignmentIdsFromEnv = 'n/a'
+$azureRoleAssignmentIdsFromEnv = 'n/a'
+$exoServicePrincipalDisplayNameFromEnv = 'n/a'
 $envValues = & azd env get-values
 if ($LASTEXITCODE -eq 0) {
   $easyAuthAppObjectIdValue = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID'
@@ -111,6 +122,30 @@ if ($LASTEXITCODE -eq 0) {
   if (-not [string]::IsNullOrWhiteSpace($easyAuthAppDisplayNameValue)) {
     $easyAuthAppDisplayName = $easyAuthAppDisplayNameValue
   }
+
+  $includeExchangeValue = Get-EnvValue -Lines $envValues -Name 'INCLUDE_EXCHANGE'
+  $includeTeamsValue = Get-EnvValue -Lines $envValues -Name 'INCLUDE_TEAMS'
+  $includeAzureValue = Get-EnvValue -Lines $envValues -Name 'INCLUDE_AZURE'
+  $azureScopesValue = Get-EnvValue -Lines $envValues -Name 'AZURE_RBAC_SCOPES'
+  $exchangeStatusValue = Get-EnvValue -Lines $envValues -Name 'SETUP_EXCHANGE_STATUS'
+  $teamsStatusValue = Get-EnvValue -Lines $envValues -Name 'SETUP_TEAMS_STATUS'
+  $azureStatusValue = Get-EnvValue -Lines $envValues -Name 'SETUP_AZURE_STATUS'
+  $exoAppRoleIdsValue = Get-EnvValue -Lines $envValues -Name 'EXO_APPROLE_ASSIGNMENT_IDS'
+  $teamsRoleIdsValue = Get-EnvValue -Lines $envValues -Name 'TEAMS_READER_ROLE_ASSIGNMENT_IDS'
+  $azureRoleIdsValue = Get-EnvValue -Lines $envValues -Name 'AZURE_ROLE_ASSIGNMENT_IDS'
+  $exoSpDisplayNameValue = Get-EnvValue -Lines $envValues -Name 'EXO_SERVICE_PRINCIPAL_DISPLAY_NAME'
+
+  if (-not [string]::IsNullOrWhiteSpace($includeExchangeValue)) { $includeExchangeFromEnv = $includeExchangeValue }
+  if (-not [string]::IsNullOrWhiteSpace($includeTeamsValue)) { $includeTeamsFromEnv = $includeTeamsValue }
+  if (-not [string]::IsNullOrWhiteSpace($includeAzureValue)) { $includeAzureFromEnv = $includeAzureValue }
+  if (-not [string]::IsNullOrWhiteSpace($azureScopesValue)) { $azureScopesFromEnv = $azureScopesValue }
+  if (-not [string]::IsNullOrWhiteSpace($exchangeStatusValue)) { $exchangeSetupStatusFromEnv = $exchangeStatusValue }
+  if (-not [string]::IsNullOrWhiteSpace($teamsStatusValue)) { $teamsSetupStatusFromEnv = $teamsStatusValue }
+  if (-not [string]::IsNullOrWhiteSpace($azureStatusValue)) { $azureSetupStatusFromEnv = $azureStatusValue }
+  if (-not [string]::IsNullOrWhiteSpace($exoAppRoleIdsValue)) { $exoAppRoleAssignmentIdsFromEnv = $exoAppRoleIdsValue }
+  if (-not [string]::IsNullOrWhiteSpace($teamsRoleIdsValue)) { $teamsRoleAssignmentIdsFromEnv = $teamsRoleIdsValue }
+  if (-not [string]::IsNullOrWhiteSpace($azureRoleIdsValue)) { $azureRoleAssignmentIdsFromEnv = $azureRoleIdsValue }
+  if (-not [string]::IsNullOrWhiteSpace($exoSpDisplayNameValue)) { $exoServicePrincipalDisplayNameFromEnv = $exoSpDisplayNameValue }
 }
 
 Write-Host 'Running postprovision runbook validation...'
@@ -157,7 +192,18 @@ $summaryLines += "Subscription: $SubscriptionId"
 $summaryLines += "Resource group: $ResourceGroupName"
 $summaryLines += "Deployment mode: $deploymentModeEffective"
 $summaryLines += "Include web app: $($includeWebAppEffective.ToString().ToLower())"
+$summaryLines += "Include Exchange: $includeExchangeFromEnv"
+$summaryLines += "Include Teams: $includeTeamsFromEnv"
+$summaryLines += "Include Azure: $includeAzureFromEnv"
 $summaryLines += "Permission profile: $PermissionProfile"
+$summaryLines += "Azure RBAC scopes: $azureScopesFromEnv"
+$summaryLines += "Exchange setup status: $exchangeSetupStatusFromEnv"
+$summaryLines += "Teams setup status: $teamsSetupStatusFromEnv"
+$summaryLines += "Azure setup status: $azureSetupStatusFromEnv"
+$summaryLines += "Exchange appRoleAssignment ids: $exoAppRoleAssignmentIdsFromEnv"
+$summaryLines += "Teams roleAssignment ids: $teamsRoleAssignmentIdsFromEnv"
+$summaryLines += "Azure roleAssignment ids: $azureRoleAssignmentIdsFromEnv"
+$summaryLines += "Exchange SP display name: $exoServicePrincipalDisplayNameFromEnv"
 $summaryLines += "Security group object id: $(if ($SecurityGroupObjectId) { $SecurityGroupObjectId } else { 'n/a' })"
 $summaryLines += "Security group display name: $(if ($SecurityGroupDisplayName) { $SecurityGroupDisplayName } else { 'n/a' })"
 $easyAuthClientId = 'n/a'

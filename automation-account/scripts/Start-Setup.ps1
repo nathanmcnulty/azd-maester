@@ -17,6 +17,18 @@ param(
   [switch]$IncludeWebApp,
 
   [Parameter(Mandatory = $false)]
+  [switch]$IncludeExchange,
+
+  [Parameter(Mandatory = $false)]
+  [switch]$IncludeTeams,
+
+  [Parameter(Mandatory = $false)]
+  [switch]$IncludeAzure,
+
+  [Parameter(Mandatory = $false)]
+  [string[]]$AzureScopes,
+
+  [Parameter(Mandatory = $false)]
   [string]$SecurityGroupObjectId,
 
   [Parameter(Mandatory = $false)]
@@ -32,6 +44,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+Set-Location $projectRoot
 
 if ($IncludeWebApp -and [string]::IsNullOrWhiteSpace($SecurityGroupObjectId)) {
   throw 'SecurityGroupObjectId is required when -IncludeWebApp is specified.'
@@ -117,6 +132,95 @@ function Select-Subscription {
   return $selectedId
 }
 
+function Test-CanPrompt {
+  try {
+    $null = $Host.UI.RawUI
+    return $true
+  }
+  catch {
+    return $false
+  }
+}
+
+function Select-AzureRbacScopes {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$DefaultSubscriptionId
+  )
+
+  if (-not (Test-CanPrompt)) {
+    Write-Warning "-IncludeAzure was specified but interactive prompting is not available. Defaulting Azure RBAC scope to subscription '/subscriptions/$DefaultSubscriptionId'."
+    return @("/subscriptions/$DefaultSubscriptionId")
+  }
+
+  $items = @()
+
+  try {
+    $mgJson = & az account management-group list -o json 2>$null
+    if ($LASTEXITCODE -eq 0 -and $mgJson) {
+      $mgs = $mgJson | ConvertFrom-Json
+      foreach ($mg in @($mgs)) {
+        $mgName = if ($mg.name) { $mg.name } elseif ($mg.id -and ($mg.id -split '/')[-1]) { ($mg.id -split '/')[-1] } else { $null }
+        if (-not $mgName) { continue }
+        $mgDisplayName = if ($mg.displayName) { $mg.displayName } else { $mgName }
+        $items += [pscustomobject]@{
+          Label = "MG  | $mgDisplayName ($mgName)"
+          Scope = "/providers/Microsoft.Management/managementGroups/$mgName"
+        }
+      }
+    }
+  }
+  catch {
+  }
+
+  $subsJson = az account list --query "[].{name:name,id:id,isDefault:isDefault}" -o json
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Failed to enumerate subscriptions for Azure scope selection.'
+  }
+
+  $subs = $subsJson | ConvertFrom-Json
+  foreach ($sub in @($subs)) {
+    $items += [pscustomobject]@{
+      Label = "SUB | $($sub.name) ($($sub.id))"
+      Scope = "/subscriptions/$($sub.id)"
+    }
+  }
+
+  if ($items.Count -eq 0) {
+    Write-Warning "No management groups or subscriptions were discovered. Defaulting Azure RBAC scope to subscription '/subscriptions/$DefaultSubscriptionId'."
+    return @("/subscriptions/$DefaultSubscriptionId")
+  }
+
+  Write-Host 'Select one or more Azure RBAC scopes to grant the Automation Account managed identity Reader access.'
+  Write-Host 'Enter one or more numbers separated by commas. Press Enter to use the current subscription.'
+  for ($index = 0; $index -lt $items.Count; $index++) {
+    Write-Host ("[{0}] {1}" -f ($index + 1), $items[$index].Label)
+  }
+
+  $selection = Read-Host 'Selection'
+  if ([string]::IsNullOrWhiteSpace($selection)) {
+    return @("/subscriptions/$DefaultSubscriptionId")
+  }
+
+  $selectedScopes = @()
+  $parts = @($selection -split ',' | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  foreach ($part in $parts) {
+    $value = 0
+    if (-not [int]::TryParse($part, [ref]$value)) {
+      throw "Invalid selection '$part'. Expected a number or comma-separated numbers."
+    }
+
+    $selectedIndex = $value - 1
+    if ($selectedIndex -lt 0 -or $selectedIndex -ge $items.Count) {
+      throw "Selection '$value' is out of range."
+    }
+
+    $selectedScopes += $items[$selectedIndex].Scope
+  }
+
+  return @($selectedScopes | Sort-Object -Unique)
+}
+
 if (-not (Test-CommandExists -CommandName 'az')) {
   throw 'Azure CLI (az) is required but was not found on PATH.'
 }
@@ -152,9 +256,20 @@ $initializeArgs = @{
   Location          = $Location
   ResourceGroupName = $effectiveResourceGroupName
   IncludeWebApp     = [bool]$IncludeWebApp
+  IncludeExchange   = [bool]$IncludeExchange
+  IncludeTeams      = [bool]$IncludeTeams
+  IncludeAzure      = [bool]$IncludeAzure
   WebAppSku         = $WebAppSku
   PermissionProfile = $PermissionProfile
   TenantId          = $tenantId
+}
+
+if ($IncludeAzure -and (-not $AzureScopes -or $AzureScopes.Count -eq 0)) {
+  $AzureScopes = Select-AzureRbacScopes -DefaultSubscriptionId $effectiveSubscriptionId
+}
+
+if ($AzureScopes -and $AzureScopes.Count -gt 0) {
+  $initializeArgs['AzureScopes'] = @($AzureScopes)
 }
 
 if (-not [string]::IsNullOrWhiteSpace($SecurityGroupObjectId)) {
