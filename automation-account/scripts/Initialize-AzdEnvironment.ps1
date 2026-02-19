@@ -86,6 +86,7 @@ else {
 function Invoke-Azd {
   param(
     [Parameter(Mandatory = $true)]
+    [AllowEmptyString()]
     [string[]]$Arguments,
 
     [Parameter(Mandatory = $true)]

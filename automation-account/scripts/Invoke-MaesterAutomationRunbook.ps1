@@ -340,7 +340,16 @@ if ($MailRecipient) {
   Write-Output "Email notifications enabled for recipient: $MailRecipient"
 }
 
-Invoke-Maester @maesterInvokeParameters
+try {
+  $ErrorActionPreference = 'Continue'
+  Invoke-Maester @maesterInvokeParameters
+}
+catch {
+  Write-Warning "Invoke-Maester encountered an error: $($_.Exception.Message)"
+}
+finally {
+  $ErrorActionPreference = 'Stop'
+}
 Write-Output 'Invoke-Maester execution completed.'
 
 $generatedHtml = Get-ChildItem -Path $tempRoot -Recurse -Filter '*.html' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
