@@ -18,6 +18,18 @@ param mailRecipient string = ''
 @description('Deploy optional Web App hosting component')
 param includeWebAppOption string = 'false'
 
+@description('Enable Exchange Online connectivity and permissions for Maester')
+param includeExchangeOption string = 'false'
+
+@description('Enable Microsoft Teams connectivity and permissions for Maester')
+param includeTeamsOption string = 'false'
+
+@description('Enable Azure RBAC role assignments for Maester')
+param includeAzureOption string = 'false'
+
+@description('JSON array string of Azure scopes for RBAC assignments (management groups and/or subscriptions)')
+param azureRbacScopes string = '[]'
+
 @description('Optional Web App SKU for hosting report access portal')
 param webAppSkuName string = 'F1'
 
@@ -46,7 +58,7 @@ var defaultTags = {
 }
 var resourceTags = union(defaultTags, customTags)
 
-resource automationAccount 'Microsoft.Automation/automationAccounts@2023-11-01' = {
+resource automationAccount 'Microsoft.Automation/automationAccounts@2024-10-23' = {
   name: automationAccountName
   location: location
   tags: resourceTags
@@ -127,6 +139,22 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = if (includeWebApp) {
         }
       ]
     }
+  }
+}
+
+resource webAppScmBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = if (includeWebApp) {
+  name: 'scm'
+  parent: webApp
+  properties: {
+    allow: false
+  }
+}
+
+resource webAppFtpBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = if (includeWebApp) {
+  name: 'ftp'
+  parent: webApp
+  properties: {
+    allow: false
   }
 }
 
@@ -316,6 +344,26 @@ resource runtimePackageGraphAuth 'Microsoft.Automation/automationAccounts/runtim
   }
 }
 
+resource runtimePackageExchangeOnlineManagement 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
+  name: 'ExchangeOnlineManagement'
+  parent: runtime74
+  properties: {
+    contentLink: {
+      uri: 'https://www.powershellgallery.com/api/v2/package/ExchangeOnlineManagement'
+    }
+  }
+}
+
+resource runtimePackageMicrosoftTeams 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
+  name: 'MicrosoftTeams'
+  parent: runtime74
+  properties: {
+    contentLink: {
+      uri: 'https://www.powershellgallery.com/api/v2/package/MicrosoftTeams'
+    }
+  }
+}
+
 resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2024-10-23' = {
   name: runbookName
   parent: automationAccount
@@ -338,6 +386,8 @@ resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2024-10-23' =
     runtimePackageNuGet
     runtimePackagePackageManagement
     runtimePackageGraphAuth
+    runtimePackageExchangeOnlineManagement
+    runtimePackageMicrosoftTeams
   ]
 }
 
@@ -358,6 +408,46 @@ resource variableMailRecipient 'Microsoft.Automation/automationAccounts/variable
     description: 'Optional recipient for Maester email notifications'
     isEncrypted: false
     value: '"${mailRecipient}"'
+  }
+}
+
+resource variableIncludeExchange 'Microsoft.Automation/automationAccounts/variables@2023-11-01' = {
+  name: 'IncludeExchange'
+  parent: automationAccount
+  properties: {
+    description: 'Whether the runbook should attempt to connect to Exchange Online'
+    isEncrypted: false
+    value: '"${includeExchangeOption}"'
+  }
+}
+
+resource variableIncludeTeams 'Microsoft.Automation/automationAccounts/variables@2023-11-01' = {
+  name: 'IncludeTeams'
+  parent: automationAccount
+  properties: {
+    description: 'Whether the runbook should attempt to connect to Microsoft Teams'
+    isEncrypted: false
+    value: '"${includeTeamsOption}"'
+  }
+}
+
+resource variableIncludeAzure 'Microsoft.Automation/automationAccounts/variables@2023-11-01' = {
+  name: 'IncludeAzure'
+  parent: automationAccount
+  properties: {
+    description: 'Whether setup should grant Azure RBAC at the requested scopes'
+    isEncrypted: false
+    value: '"${includeAzureOption}"'
+  }
+}
+
+resource variableAzureRbacScopes 'Microsoft.Automation/automationAccounts/variables@2023-11-01' = {
+  name: 'AzureRbacScopes'
+  parent: automationAccount
+  properties: {
+    description: 'JSON array string of Azure RBAC scopes requested for the managed identity'
+    isEncrypted: false
+    value: '"${azureRbacScopes}"'
   }
 }
 

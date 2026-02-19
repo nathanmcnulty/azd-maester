@@ -17,6 +17,18 @@ param(
   [switch]$IncludeWebApp,
 
   [Parameter(Mandatory = $false)]
+  [switch]$IncludeExchange,
+
+  [Parameter(Mandatory = $false)]
+  [switch]$IncludeTeams,
+
+  [Parameter(Mandatory = $false)]
+  [switch]$IncludeAzure,
+
+  [Parameter(Mandatory = $false)]
+  [string[]]$AzureScopes,
+
+  [Parameter(Mandatory = $false)]
   [string]$WebAppSku = 'F1',
 
   [Parameter(Mandatory = $false)]
@@ -36,8 +48,23 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+Set-Location $projectRoot
+
 if (-not $PSBoundParameters.ContainsKey('IncludeWebApp')) {
   $IncludeWebApp = $false
+}
+
+if (-not $PSBoundParameters.ContainsKey('IncludeExchange')) {
+  $IncludeExchange = $false
+}
+
+if (-not $PSBoundParameters.ContainsKey('IncludeTeams')) {
+  $IncludeTeams = $false
+}
+
+if (-not $PSBoundParameters.ContainsKey('IncludeAzure')) {
+  $IncludeAzure = $false
 }
 
 if (-not $PSBoundParameters.ContainsKey('PermissionProfile') -or [string]::IsNullOrWhiteSpace($PermissionProfile)) {
@@ -59,6 +86,7 @@ else {
 function Invoke-Azd {
   param(
     [Parameter(Mandatory = $true)]
+    [AllowEmptyString()]
     [string[]]$Arguments,
 
     [Parameter(Mandatory = $true)]
@@ -71,21 +99,35 @@ function Invoke-Azd {
   }
 }
 
-$envCreated = $true
-& azd env new $EnvironmentName --subscription $SubscriptionId --location $Location --no-prompt
+$envNewOutput = & azd env new $EnvironmentName --subscription $SubscriptionId --location $Location --no-prompt 2>&1
 if ($LASTEXITCODE -ne 0) {
-  $envCreated = $false
-}
-
-if (-not $envCreated) {
+  $alreadyExists = $envNewOutput | Where-Object { $_ -match 'already exists' }
+  if ($alreadyExists) {
+    Write-Host "Environment '$EnvironmentName' already exists. Selecting it."
+  }
+  else {
+    $envNewOutput | ForEach-Object { Write-Host $_ }
+    throw "azd env new failed for environment '$EnvironmentName'."
+  }
   Invoke-Azd -Arguments @('env', 'select', $EnvironmentName) -Operation 'env select existing environment'
 }
 
 Invoke-Azd -Arguments @('env', 'set', 'AZURE_RESOURCE_GROUP', $resourceGroupName) -Operation 'set resource group'
 Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_WEB_APP', $IncludeWebApp.ToString().ToLower()) -Operation 'set include web app'
+Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_EXCHANGE', $IncludeExchange.ToString().ToLower()) -Operation 'set include exchange'
+Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_TEAMS', $IncludeTeams.ToString().ToLower()) -Operation 'set include teams'
+Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_AZURE', $IncludeAzure.ToString().ToLower()) -Operation 'set include azure'
 Invoke-Azd -Arguments @('env', 'set', 'WEB_APP_SKU', $WebAppSku) -Operation 'set web app sku'
 Invoke-Azd -Arguments @('env', 'set', 'PERMISSION_PROFILE', $PermissionProfile) -Operation 'set permission profile'
 Invoke-Azd -Arguments @('env', 'set', 'VALIDATE_RUNBOOK_ON_PROVISION', 'true') -Operation 'set postprovision runbook validation'
+
+$effectiveAzureScopes = @()
+if ($IncludeAzure -and $AzureScopes -and $AzureScopes.Count -gt 0) {
+  $effectiveAzureScopes = @($AzureScopes)
+}
+
+$azureScopesSerialized = (@($effectiveAzureScopes) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique) -join ';'
+Invoke-Azd -Arguments @('env', 'set', 'AZURE_RBAC_SCOPES', $azureScopesSerialized) -Operation 'set azure rbac scopes'
 
 if ($IncludeWebApp) {
   Invoke-Azd -Arguments @('env', 'set', 'SECURITY_GROUP_OBJECT_ID', $SecurityGroupObjectId) -Operation 'set security group'
@@ -97,6 +139,10 @@ if ($IncludeWebApp) {
 Write-Host "Environment '$EnvironmentName' is ready."
 Write-Host "Resource group: $resourceGroupName"
 Write-Host ("Web app enabled: {0}" -f $IncludeWebApp.ToString().ToLower())
+Write-Host ("Include Exchange: {0}" -f $IncludeExchange.ToString().ToLower())
+Write-Host ("Include Teams: {0}" -f $IncludeTeams.ToString().ToLower())
+Write-Host ("Include Azure: {0}" -f $IncludeAzure.ToString().ToLower())
+Write-Host "Azure RBAC scopes: $azureScopesSerialized"
 Write-Host "Permission profile: $PermissionProfile"
 Write-Host 'Validate on provision: true'
 Write-Host 'Next command: azd provision --no-prompt --no-state'

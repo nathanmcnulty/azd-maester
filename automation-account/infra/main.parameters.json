@@ -8,6 +8,18 @@
     "includeWebAppOption": {
       "value": "${INCLUDE_WEB_APP}"
     },
+    "includeExchangeOption": {
+      "value": "${INCLUDE_EXCHANGE}"
+    },
+    "includeTeamsOption": {
+      "value": "${INCLUDE_TEAMS}"
+    },
+    "includeAzureOption": {
+      "value": "${INCLUDE_AZURE}"
+    },
+    "azureRbacScopes": {
+      "value": "${AZURE_RBAC_SCOPES}"
+    },
     "mailRecipient": {
       "value": "${MAIL_RECIPIENT}"
     },
