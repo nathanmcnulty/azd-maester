@@ -401,26 +401,57 @@ if (-not [string]::IsNullOrWhiteSpace($resourceGroupName)) {
     -AdditionalClientIds @($easyAuthAppClientId)
 
   Write-Host "Removing resource locks in '$resourceGroupName' (if any)..."
-  $lockIdsRaw = & az lock list --resource-group $resourceGroupName --query '[].id' -o tsv
-  if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($lockIdsRaw)) {
-    $lockIds = @($lockIdsRaw -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    foreach ($lockId in $lockIds) {
-      & az lock delete --ids $lockId | Out-Null
+  # Use ARM REST API to list all locks including resource-scoped ones (az lock list only returns group-level locks)
+  $subscriptionParam = if (-not [string]::IsNullOrWhiteSpace($subscriptionId)) { @('--subscription', $subscriptionId) } else { @() }
+  $locksUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Authorization/locks?api-version=2016-09-01"
+  $locksRaw = & az rest --method get --url $locksUrl @subscriptionParam 2>$null
+  if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($locksRaw)) {
+    try {
+      $locksPayload = $locksRaw | ConvertFrom-Json
+      $lockIds = @($locksPayload.value | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      foreach ($lockId in $lockIds) {
+        Write-Host "  Removing lock: $($lockId.Split('/')[-1])"
+        & az lock delete --ids $lockId | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+          Write-Warning "Failed to remove lock: $lockId"
+        }
+      }
+      if ($lockIds.Count -gt 0) {
+        Write-Host "  Waiting for lock deletions to propagate..."
+        Start-Sleep -Seconds 15
+      }
+    }
+    catch {
+      Write-Warning "Failed to parse lock list response."
     }
   }
 }
 
-if ($KeepEnvironment) {
-  Write-Host 'Running azd down and keeping local environment files.'
-  & azd down --force --no-prompt
-}
-else {
-  Write-Host 'Running azd down and purging local environment files.'
-  & azd down --force --purge --no-prompt
+$azdDownMaxRetries = 3
+$azdDownAttempt = 0
+$azdDownSuccess = $false
+while ($azdDownAttempt -lt $azdDownMaxRetries -and -not $azdDownSuccess) {
+  $azdDownAttempt++
+  if ($KeepEnvironment) {
+    Write-Host 'Running azd down and keeping local environment files.'
+    & azd down --force --no-prompt
+  }
+  else {
+    Write-Host 'Running azd down and purging local environment files.'
+    & azd down --force --purge --no-prompt
+  }
+
+  if ($LASTEXITCODE -eq 0) {
+    $azdDownSuccess = $true
+  }
+  elseif ($azdDownAttempt -lt $azdDownMaxRetries) {
+    Write-Warning "azd down attempt $azdDownAttempt failed (may be waiting for lock propagation). Retrying in 30 seconds..."
+    Start-Sleep -Seconds 30
+  }
 }
 
-if ($LASTEXITCODE -ne 0) {
-  throw 'azd down failed.'
+if (-not $azdDownSuccess) {
+  throw 'azd down failed after multiple attempts.'
 }
 
 if (-not $KeepEnvironment) {
