@@ -13,7 +13,6 @@ param(
   [string]$ResourceGroupName,
 
   [Parameter(Mandatory = $false)]
-  [Alias('WebApp')]
   [switch]$IncludeWebApp,
 
   [Parameter(Mandatory = $false)]
@@ -57,7 +56,7 @@ function Test-CommandExists {
   return [bool](Get-Command -Name $CommandName -ErrorAction SilentlyContinue)
 }
 
-function Ensure-AzureLogin {
+function Confirm-AzureLogin {
   try {
     $null = az account show --output none 2>$null
     if ($LASTEXITCODE -eq 0) {
@@ -229,7 +228,7 @@ if (-not (Test-CommandExists -CommandName 'azd')) {
   throw 'Azure Developer CLI (azd) is required but was not found on PATH.'
 }
 
-Ensure-AzureLogin
+Confirm-AzureLogin
 $effectiveSubscriptionId = Select-Subscription -RequestedSubscriptionId $SubscriptionId
 $tenantId = az account show --query tenantId -o tsv
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tenantId)) {
@@ -306,5 +305,5 @@ foreach ($line in $envValuesText) {
 
 Write-Host "Completed. Environment: $EnvironmentName"
 if (-not [string]::IsNullOrWhiteSpace($webHostName)) {
-  Write-Host "Web app URL: https://$webHostName/"
+  Write-Host "Web app URL: https://$webHostName/" -ForegroundColor Cyan
 }
