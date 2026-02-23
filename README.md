@@ -7,7 +7,6 @@ Production-style `azd` templates for running Maester on Azure with managed ident
 - `automation-account`: End-to-end scheduled Maester solution (recommended baseline)
 - `container-app-job`: Scheduled Maester execution using Azure Container Apps Jobs
 - `function-app`: Maester execution using a PowerShell Azure Function App
-- `web-app`: Web hosting for Maester HTML reports
 - `azure-devops`: CI/CD integration guidance for all solution folders
 
 ## Recommended starting point
@@ -28,10 +27,6 @@ After `azd init -t <your-template-id>`, choose a folder:
 - `function-app`
   - `cd function-app`
   - `azd provision`
-- `web-app`
-  - `cd web-app`
-  - `azd provision`
-  - `./scripts/Publish-MaesterReport.ps1 -ReportPath <path-to-report.html> -SubscriptionId <subId> -ResourceGroupName <rgName> -WebAppName <webAppName>`
 - `azure-devops`
   - `cd <solution-folder>`
   - `azd pipeline config --provider azdo`

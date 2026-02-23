@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
   [Parameter(Mandatory = $false)]
   [string]$SubscriptionId,
@@ -43,362 +43,8 @@ Set-Location $projectRoot
 
 Import-Module Az.Accounts -Force
 Import-Module Microsoft.Graph.Authentication -Force
+Import-Module "$PSScriptRoot/shared/Maester-SetupHelpers.psm1" -Force
 
-function Test-CanPrompt {
-  try {
-    $null = $Host.UI.RawUI
-    return $true
-  }
-  catch {
-    return $false
-  }
-}
-
-function ConvertTo-BoolOrDefault {
-  param(
-    [Parameter(Mandatory = $false)]
-    [string]$Value,
-    [Parameter(Mandatory = $true)]
-    [bool]$Default
-  )
-
-  if ([string]::IsNullOrWhiteSpace($Value)) {
-    return $Default
-  }
-
-  switch ($Value.Trim().ToLower()) {
-    'true' { return $true }
-    'false' { return $false }
-    default { return $Default }
-  }
-}
-
-function Resolve-StepFailureAction {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$StepName,
-    [Parameter(Mandatory = $true)]
-    [string]$Message
-  )
-
-  Write-Warning ("{0} failed: {1}" -f $StepName, $Message)
-
-  if (-not (Test-CanPrompt)) {
-    Write-Warning "Non-interactive session detected. Skipping $StepName and continuing."
-    return 'Skip'
-  }
-
-  Write-Host "Choose how to proceed after failure in '$StepName':"
-  Write-Host '  [S] Stop setup (recommended if you need the feature enabled)'
-  Write-Host '  [K] Skip this step and continue'
-  $choice = Read-Host 'Enter S or K (default: K)'
-  if ($choice -and $choice.Trim().ToUpper() -eq 'S') {
-    return 'Stop'
-  }
-
-  return 'Skip'
-}
-
-function Set-AzdEnvValue {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$Name,
-    [Parameter(Mandatory = $true)]
-    [AllowEmptyString()]
-    [string]$Value
-  )
-
-  try {
-    & azd env set $Name $Value | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-      Write-Warning "Failed to persist $Name to azd environment."
-    }
-  }
-  catch {
-    Write-Warning "Failed to persist $Name to azd environment. Error: $($_.Exception.Message)"
-  }
-}
-
-function Set-AzdEnvJsonArray {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$Name,
-    [Parameter(Mandatory = $false)]
-    [AllowEmptyCollection()]
-    [string[]]$Values = @()
-  )
-
-  $serialized = (@($Values) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique) -join ';'
-  Set-AzdEnvValue -Name $Name -Value $serialized
-}
-
-function Ensure-ModuleAvailable {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$ModuleName,
-    [Parameter(Mandatory = $false)]
-    [string]$InstallMessage
-  )
-
-  $available = Get-Module -ListAvailable -Name $ModuleName | Select-Object -First 1
-  if ($available) {
-    Import-Module $ModuleName -Force
-    return $true
-  }
-
-  if (-not (Test-CanPrompt)) {
-    Write-Warning "$ModuleName is not installed and this is a non-interactive session."
-    return $false
-  }
-
-  if ($InstallMessage) {
-    Write-Host $InstallMessage
-  }
-
-  $installChoice = Read-Host "Install PowerShell module '$ModuleName' now? (Y/N)"
-  if (-not $installChoice -or $installChoice.Trim().ToUpper() -ne 'Y') {
-    return $false
-  }
-
-  Install-Module -Name $ModuleName -Scope CurrentUser -Force -AllowClobber
-  Import-Module $ModuleName -Force
-  return $true
-}
-
-function Get-AzCliAccessToken {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$Resource
-  )
-
-  try {
-    $tokenJson = az account get-access-token --resource $Resource -o json 2>$null
-    if ($LASTEXITCODE -eq 0 -and $tokenJson) {
-      $tokenData = $tokenJson | ConvertFrom-Json
-      if ($tokenData.accessToken) {
-        return $tokenData.accessToken
-      }
-    }
-  }
-  catch {
-    Write-Verbose "az cli token acquisition failed for ${Resource}: $($_.Exception.Message)"
-  }
-
-  return $null
-}
-
-function Connect-MgGraphSilent {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$TenantId,
-    [Parameter(Mandatory = $false)]
-    [string[]]$Scopes = @()
-  )
-
-  $token = Get-AzCliAccessToken -Resource 'https://graph.microsoft.com'
-  if ($token) {
-    $secureToken = ConvertTo-SecureString $token -AsPlainText -Force
-    Connect-MgGraph -AccessToken $secureToken -NoWelcome | Out-Null
-    return
-  }
-
-  Write-Verbose 'az cli token not available for Microsoft Graph. Falling back to interactive auth.'
-  if ($Scopes.Count -gt 0) {
-    Connect-MgGraph -TenantId $TenantId -Scopes $Scopes -NoWelcome | Out-Null
-  }
-  else {
-    Connect-MgGraph -TenantId $TenantId -Scopes 'User.Read' -NoWelcome | Out-Null
-  }
-}
-
-function Connect-ExchangeOnlineSilent {
-  param(
-    [Parameter(Mandatory = $false)]
-    [string]$Organization
-  )
-
-  $token = Get-AzCliAccessToken -Resource 'https://outlook.office365.com'
-  if ($token) {
-    $connectArgs = @{
-      AccessToken = $token
-      ShowBanner  = $false
-    }
-    if (-not [string]::IsNullOrWhiteSpace($Organization)) {
-      $connectArgs['Organization'] = $Organization
-    }
-    Connect-ExchangeOnline @connectArgs | Out-Null
-    return
-  }
-
-  Write-Verbose 'az cli token not available for Exchange Online. Falling back to interactive auth.'
-  $connectArgs = @{
-    ShowBanner = $false
-    DisableWAM = $true
-  }
-  if (-not [string]::IsNullOrWhiteSpace($Organization)) {
-    $connectArgs['Organization'] = $Organization
-  }
-  Connect-ExchangeOnline @connectArgs | Out-Null
-}
-
-function Grant-ServicePrincipalAppRoleAssignment {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$PrincipalObjectId,
-    [Parameter(Mandatory = $true)]
-    [string]$ResourceAppId,
-    [Parameter(Mandatory = $true)]
-    [Guid]$AppRoleId
-  )
-
-  $spResponse = Invoke-MgGraphRequest -Method GET -Uri ("https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '{0}'&`$select=id" -f $ResourceAppId)
-  if (-not $spResponse.value -or $spResponse.value.Count -eq 0) {
-    throw "Service principal for resource appId '$ResourceAppId' was not found in this tenant."
-  }
-
-  $resourceSpId = $spResponse.value[0].id
-  $existing = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments"
-  $match = @($existing.value | Where-Object { $_.resourceId -eq $resourceSpId -and $_.appRoleId -eq $AppRoleId }) | Select-Object -First 1
-  if ($match) {
-    return $null
-  }
-
-  $body = @{
-    principalId = $PrincipalObjectId
-    resourceId  = $resourceSpId
-    appRoleId   = $AppRoleId
-  } | ConvertTo-Json
-
-  $created = Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments" -Body $body -ContentType 'application/json'
-  if ($created -and $created.id) {
-    return $created.id
-  }
-
-  return $null
-}
-
-function Get-DirectoryRoleDefinitionId {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$RoleDisplayName
-  )
-
-  $escaped = $RoleDisplayName.Replace("'", "''")
-  $defs = Invoke-MgGraphRequest -Method GET -Uri ("https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?`$filter=displayName eq '{0}'&`$select=id,displayName" -f $escaped)
-  if (-not $defs.value -or $defs.value.Count -eq 0) {
-    throw "Directory role definition '$RoleDisplayName' was not found."
-  }
-
-  return $defs.value[0].id
-}
-
-function Get-DirectoryRoleAssignmentId {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$PrincipalObjectId,
-    [Parameter(Mandatory = $true)]
-    [string]$RoleDefinitionId
-  )
-
-  $existing = Invoke-MgGraphRequest -Method GET -Uri (
-    "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?`$filter=principalId eq '{0}' and roleDefinitionId eq '{1}' and directoryScopeId eq '/'&`$select=id" -f $PrincipalObjectId, $RoleDefinitionId
-  )
-
-  if ($existing.value -and $existing.value.Count -gt 0) {
-    return $existing.value[0].id
-  }
-
-  return $null
-}
-
-function Ensure-DirectoryRoleAssignment {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$PrincipalObjectId,
-    [Parameter(Mandatory = $true)]
-    [string]$RoleDisplayName
-  )
-
-  $roleDefinitionId = Get-DirectoryRoleDefinitionId -RoleDisplayName $RoleDisplayName
-
-  $existingId = Get-DirectoryRoleAssignmentId -PrincipalObjectId $PrincipalObjectId -RoleDefinitionId $roleDefinitionId
-  if ($existingId) {
-    return $null
-  }
-
-  $body = @{
-    principalId      = $PrincipalObjectId
-    roleDefinitionId = $roleDefinitionId
-    directoryScopeId = '/'
-  } | ConvertTo-Json
-
-  $created = Invoke-MgGraphRequest -Method POST -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments' -Body $body -ContentType 'application/json'
-  if ($created -and $created.id) {
-    return $created.id
-  }
-
-  return $null
-}
-
-function Ensure-AzureReaderRoleAssignment {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$Scope,
-    [Parameter(Mandatory = $true)]
-    [string]$PrincipalObjectId,
-    [Parameter(Mandatory = $true)]
-    [string]$SubscriptionId
-  )
-
-  $readerRoleGuid = 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
-  $roleDefinitionId = if ($Scope -like '/providers/Microsoft.Management/managementGroups/*') {
-    "/providers/Microsoft.Authorization/roleDefinitions/$readerRoleGuid"
-  }
-  else {
-    "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/$readerRoleGuid"
-  }
-
-  # Pre-check: look for an existing Reader assignment for this principal at this scope
-  $existingPath = "$Scope/providers/Microsoft.Authorization/roleAssignments?`$filter=principalId eq '$PrincipalObjectId' and atScope()&api-version=2022-04-01"
-  $existingResponse = Invoke-AzRestMethod -Method GET -Path $existingPath
-  if ($existingResponse.StatusCode -eq 200) {
-    $existingPayload = $existingResponse.Content | ConvertFrom-Json
-    $existingMatch = @($existingPayload.value | Where-Object {
-        $_.properties.roleDefinitionId -like "*$readerRoleGuid"
-      }) | Select-Object -First 1
-    if ($existingMatch) {
-      return $null
-    }
-  }
-
-  $assignmentName = [guid]::NewGuid().ToString()
-  $path = "$Scope/providers/Microsoft.Authorization/roleAssignments/${assignmentName}?api-version=2022-04-01"
-  $body = @{
-    properties = @{
-      roleDefinitionId = $roleDefinitionId
-      principalId      = $PrincipalObjectId
-      principalType    = 'ServicePrincipal'
-    }
-  } | ConvertTo-Json -Depth 10
-
-  $response = Invoke-AzRestMethod -Method PUT -Path $path -Payload $body
-  if ($response.StatusCode -in @(200, 201)) {
-    $payload = $response.Content | ConvertFrom-Json
-    if ($payload -and $payload.id) {
-      return $payload.id
-    }
-    return $null
-  }
-
-  # 409 Conflict means the assignment already exists (race condition with pre-check)
-  if ($response.StatusCode -eq 409) {
-    return $null
-  }
-
-  # Any other non-success status is a real error
-  $errorContent = $response.Content
-  throw "Azure RBAC Reader assignment failed at scope '$Scope'. HTTP $($response.StatusCode): $errorContent"
-}
 
 # ──────────────────────────────────────────────
 # Resolve parameters from environment
@@ -607,7 +253,7 @@ if (-not $containerAppJob) {
 
 $containerAppJobName = $containerAppJob.name
 
-$principalId = & "$PSScriptRoot\..\..\shared\scripts\Get-ManagedIdentityPrincipal.ps1" `
+$principalId = & "$PSScriptRoot\shared\Get-ManagedIdentityPrincipal.ps1" `
   -SubscriptionId $SubscriptionId `
   -ResourceGroupName $resolvedResourceGroupName `
   -ProviderNamespace 'Microsoft.App' `
@@ -621,7 +267,7 @@ Set-AzdEnvValue -Name 'CONTAINER_JOB_MI_PRINCIPAL_ID' -Value $principalId
 # Grant Graph API permissions
 # ──────────────────────────────────────────────
 
-& "$PSScriptRoot\..\..\shared\scripts\Grant-MaesterGraphPermissions.ps1" `
+& "$PSScriptRoot\shared\Grant-MaesterGraphPermissions.ps1" `
   -TenantId $TenantId `
   -PrincipalObjectId $principalId `
   -PermissionProfile $PermissionProfile
@@ -696,7 +342,7 @@ if ($IncludeExchange -and $exchangeSetupStatus -eq 'pending') {
     $exoServicePrincipalDisplayName = $miSp.displayName
 
     $installMsg = "Exchange Online PowerShell is required to grant the managed identity the Exchange RBAC role 'View-Only Configuration'."
-    if (-not (Ensure-ModuleAvailable -ModuleName 'ExchangeOnlineManagement' -InstallMessage $installMsg)) {
+    if (-not (Test-ModuleAvailable -ModuleName 'ExchangeOnlineManagement' -InstallMessage $installMsg)) {
       throw 'ExchangeOnlineManagement module is not available. Install it and rerun setup with -IncludeExchange.'
     }
 
@@ -763,7 +409,7 @@ if ($IncludeExchange -and $exchangeSetupStatus -eq 'pending') {
 
 if ($IncludeTeams -and $teamsSetupStatus -eq 'pending') {
   try {
-    $newTeamsRoleAssignmentId = Ensure-DirectoryRoleAssignment -PrincipalObjectId $principalId -RoleDisplayName 'Teams Reader'
+    $newTeamsRoleAssignmentId = Test-DirectoryRoleAssignment -PrincipalObjectId $principalId -RoleDisplayName 'Teams Reader'
     if ($newTeamsRoleAssignmentId) {
       $teamsRoleAssignmentIds += $newTeamsRoleAssignmentId
       Write-Host "Assigned Entra directory role 'Teams Reader' to the Container App Job managed identity."
@@ -791,7 +437,7 @@ if ($IncludeAzure -and $azureSetupStatus -eq 'pending') {
     }
 
     try {
-      $newAzureAssignmentId = Ensure-AzureReaderRoleAssignment -Scope $scope -PrincipalObjectId $principalId -SubscriptionId $SubscriptionId
+      $newAzureAssignmentId = Test-AzureReaderRoleAssignment -Scope $scope -PrincipalObjectId $principalId -SubscriptionId $SubscriptionId
       if ($newAzureAssignmentId) {
         $azureRoleAssignmentIds += $newAzureAssignmentId
         Write-Host "Granted Azure RBAC Reader to Container App Job managed identity at scope: $scope"

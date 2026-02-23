@@ -41,6 +41,10 @@ param(
   [string]$PermissionProfile = 'Extended',
 
   [Parameter(Mandatory = $false)]
+  [ValidateSet('FC1', 'B1', 'Y1')]
+  [string]$Plan = 'FC1',
+
+  [Parameter(Mandatory = $false)]
   [string]$MailRecipient = ''
 )
 
@@ -97,6 +101,7 @@ $initializeArgs = @{
   WebAppSku         = $WebAppSku
   PermissionProfile = $PermissionProfile
   TenantId          = $tenantId
+  Plan              = $Plan
   MailRecipient     = $MailRecipient
 }
 
@@ -120,7 +125,7 @@ if ($IncludeAzure -and (-not $AzureScopes -or $AzureScopes.Count -eq 0)) {
     } catch {}
   }
   if (-not $AzureScopes -or $AzureScopes.Count -eq 0) {
-    $AzureScopes = Select-AzureRbacScopes -DefaultSubscriptionId $effectiveSubscriptionId -ResourceTypeName 'Automation Account'
+    $AzureScopes = Select-AzureRbacScopes -DefaultSubscriptionId $effectiveSubscriptionId -ResourceTypeName 'Function App'
   }
 }
 

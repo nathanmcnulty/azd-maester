@@ -99,7 +99,6 @@ $easyAuthAppDisplayName = 'n/a'
 $includeExchangeFromEnv = 'n/a'
 $includeTeamsFromEnv = 'n/a'
 $includeAzureFromEnv = 'n/a'
-$includeACRFromEnv = 'n/a'
 $azureScopesFromEnv = 'n/a'
 $exchangeSetupStatusFromEnv = 'n/a'
 $teamsSetupStatusFromEnv = 'n/a'
@@ -127,7 +126,6 @@ if ($LASTEXITCODE -eq 0) {
   $includeExchangeValue = Get-EnvValue -Lines $envValues -Name 'INCLUDE_EXCHANGE'
   $includeTeamsValue = Get-EnvValue -Lines $envValues -Name 'INCLUDE_TEAMS'
   $includeAzureValue = Get-EnvValue -Lines $envValues -Name 'INCLUDE_AZURE'
-  $includeACRValue = Get-EnvValue -Lines $envValues -Name 'INCLUDE_ACR'
   $azureScopesValue = Get-EnvValue -Lines $envValues -Name 'AZURE_RBAC_SCOPES'
   $exchangeStatusValue = Get-EnvValue -Lines $envValues -Name 'SETUP_EXCHANGE_STATUS'
   $teamsStatusValue = Get-EnvValue -Lines $envValues -Name 'SETUP_TEAMS_STATUS'
@@ -140,7 +138,6 @@ if ($LASTEXITCODE -eq 0) {
   if (-not [string]::IsNullOrWhiteSpace($includeExchangeValue)) { $includeExchangeFromEnv = $includeExchangeValue }
   if (-not [string]::IsNullOrWhiteSpace($includeTeamsValue)) { $includeTeamsFromEnv = $includeTeamsValue }
   if (-not [string]::IsNullOrWhiteSpace($includeAzureValue)) { $includeAzureFromEnv = $includeAzureValue }
-  if (-not [string]::IsNullOrWhiteSpace($includeACRValue)) { $includeACRFromEnv = $includeACRValue }
   if (-not [string]::IsNullOrWhiteSpace($azureScopesValue)) { $azureScopesFromEnv = $azureScopesValue }
   if (-not [string]::IsNullOrWhiteSpace($exchangeStatusValue)) { $exchangeSetupStatusFromEnv = $exchangeStatusValue }
   if (-not [string]::IsNullOrWhiteSpace($teamsStatusValue)) { $teamsSetupStatusFromEnv = $teamsStatusValue }
@@ -151,19 +148,22 @@ if ($LASTEXITCODE -eq 0) {
   if (-not [string]::IsNullOrWhiteSpace($exoSpDisplayNameValue)) { $exoServicePrincipalDisplayNameFromEnv = $exoSpDisplayNameValue }
 }
 
-Write-Host 'Running postprovision job validation...'
+Write-Host 'Running postprovision function validation...'
 
 # When Exchange or Teams permissions were just provisioned, poll Graph API
 # to verify the app role assignments are visible before triggering validation.
 # This replaces a static 120-second delay with active polling that proceeds
 # as soon as the permissions are verified.
 $needsReplicationWait = $false
-if ($exchangeSetupStatusFromEnv -eq 'configured' -or $teamsSetupStatusFromEnv -eq 'configured') {
+if ($exchangeSetupStatusFromEnv -ne 'n/a' -and $exchangeSetupStatusFromEnv -eq 'configured') {
+  $needsReplicationWait = $true
+}
+if ($teamsSetupStatusFromEnv -ne 'n/a' -and $teamsSetupStatusFromEnv -eq 'configured') {
   $needsReplicationWait = $true
 }
 if ($needsReplicationWait) {
   # Retrieve the managed identity principal ID from azd env
-  $miPrincipalId = Get-EnvValue -Lines $envValues -Name 'CONTAINER_JOB_MI_PRINCIPAL_ID'
+  $miPrincipalId = Get-EnvValue -Lines $envValues -Name 'FUNCTION_APP_MI_PRINCIPAL_ID'
   if ($miPrincipalId) {
     Import-Module Microsoft.Graph.Authentication -Force -ErrorAction SilentlyContinue
     $pollInterval = 15
@@ -192,38 +192,75 @@ if ($needsReplicationWait) {
       Write-Host "  Waiting for permission replication... (${elapsed}s elapsed)"
     }
     if (-not $confirmed) {
-      Write-Warning "Permission verification timed out after ${maxWaitSeconds}s. Proceeding to validation (retry logic in container job will handle any remaining delay)."
+      Write-Warning "Permission verification timed out after ${maxWaitSeconds}s. Proceeding to validation (retry logic in function will handle any remaining delay)."
     }
   } else {
     Write-Warning 'Managed identity principal ID not found in environment. Skipping permission verification polling.'
   }
 }
 
-$containerAppJobName = "caj-maester-$($EnvironmentName.ToLower())"
-$testParams = @{
-  SubscriptionId      = $SubscriptionId
-  ResourceGroupName   = $ResourceGroupName
-  ContainerAppJobName = $containerAppJobName
-}
-if ($TenantId) {
-  $testParams['TenantId'] = $TenantId
-}
+$validateOnProvision = $env:VALIDATE_FUNCTION_ON_PROVISION
+if ($validateOnProvision -and $validateOnProvision.Trim().ToLower() -eq 'true') {
+  $testParams = @{
+    SubscriptionId    = $SubscriptionId
+    ResourceGroupName = $ResourceGroupName
+    TimeoutMinutes    = 3
+  }
+  if ($TenantId) {
+    $testParams['TenantId'] = $TenantId
+  }
 
-$testParams['PassThru'] = $true
+  $testParams['PassThru'] = $true
 
-$validationResult = & "$PSScriptRoot\Invoke-JobValidation.ps1" @testParams
+  # Temporarily relax error handling so validation errors stay non-fatal
+  $savedErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $validationResult = & "$PSScriptRoot\Invoke-FunctionValidation.ps1" @testParams
+    if (-not $validationResult) {
+      $validationResult = [pscustomobject]@{
+        ValidationPassed  = $false
+        ExecutionComplete = $false
+        FunctionAppName   = 'unknown'
+        FinalStatus       = 'no result returned'
+        CompletedAt       = (Get-Date).ToString('o')
+      }
+    }
+  }
+  catch {
+    Write-Warning "Function validation encountered an error (non-fatal): $($_.Exception.Message)"
+    $validationResult = [pscustomobject]@{
+      ValidationPassed  = $false
+      ExecutionComplete = $false
+      FunctionAppName   = 'unknown'
+      FinalStatus       = "error: $($_.Exception.Message)"
+      CompletedAt       = (Get-Date).ToString('o')
+    }
+  }
+  finally {
+    $ErrorActionPreference = $savedErrorActionPreference
+  }
+}
+else {
+  Write-Host 'Function validation skipped (VALIDATE_FUNCTION_ON_PROVISION is not set to true).'
+  $validationResult = [pscustomobject]@{
+    ValidationPassed = 'skipped'
+    FunctionAppName  = 'n/a'
+    FinalStatus      = 'skipped'
+    CompletedAt      = (Get-Date).ToString('o')
+  }
+}
 
 $resourcesPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/resources?api-version=2021-04-01"
 $resourcesPayload = (Invoke-AzRestMethod -Method GET -Path $resourcesPath).Content | ConvertFrom-Json
 $resources = @($resourcesPayload.value)
 $customDnsDocsUrl = 'https://learn.microsoft.com/azure/app-service/app-service-web-tutorial-custom-domain'
 
-$containerJobResource = $resources | Where-Object { $_.type -eq 'Microsoft.App/jobs' } | Select-Object -First 1
-$environmentResource = $resources | Where-Object { $_.type -eq 'Microsoft.App/managedEnvironments' } | Select-Object -First 1
+$functionAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' -and $_.kind -like '*functionapp*' } | Select-Object -First 1
 $storageResource = $resources | Where-Object { $_.type -eq 'Microsoft.Storage/storageAccounts' } | Select-Object -First 1
-$acrResource = $resources | Where-Object { $_.type -eq 'Microsoft.ContainerRegistry/registries' } | Select-Object -First 1
-$webAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' } | Select-Object -First 1
-$planResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/serverfarms' } | Select-Object -First 1
+$hostingPlanResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/serverfarms' -and $_.name -like 'plan-*' } | Select-Object -First 1
+$webAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' -and $_.kind -notlike '*functionapp*' } | Select-Object -First 1
+$webAppPlanResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/serverfarms' -and $_.name -like 'asp-*' } | Select-Object -First 1
 $includeWebAppEffective = [bool]$webAppResource
 $deploymentModeEffective = if ($includeWebAppEffective) { 'webapp' } else { 'quick' }
 
@@ -242,7 +279,6 @@ $summaryLines += "Subscription: $SubscriptionId"
 $summaryLines += "Resource group: $ResourceGroupName"
 $summaryLines += "Deployment mode: $deploymentModeEffective"
 $summaryLines += "Include web app: $($includeWebAppEffective.ToString().ToLower())"
-$summaryLines += "Include ACR: $includeACRFromEnv"
 $summaryLines += "Include Exchange: $includeExchangeFromEnv"
 $summaryLines += "Include Teams: $includeTeamsFromEnv"
 $summaryLines += "Include Azure: $includeAzureFromEnv"
@@ -260,7 +296,8 @@ $summaryLines += "Security group display name: $(if ($SecurityGroupDisplayName) 
 $easyAuthClientId = 'n/a'
 $easyAuthIssuer = 'n/a'
 if ($webAppResource) {
-  $authPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$($webAppResource.name)/config/authsettingsV2?api-version=2023-12-01"
+  $webAppResourceName = $webAppResource.name
+  $authPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$webAppResourceName/config/authsettingsV2?api-version=2023-12-01"
   $auth = (Invoke-AzRestMethod -Method GET -Path $authPath).Content | ConvertFrom-Json
   if ($auth.properties.identityProviders.azureActiveDirectory.registration.clientId) {
     $easyAuthClientId = $auth.properties.identityProviders.azureActiveDirectory.registration.clientId
@@ -278,21 +315,17 @@ $summaryLines += "Easy Auth Entra app clientId (azd env): $easyAuthAppClientIdFr
 $summaryLines += "Easy Auth effective clientId: $effectiveEasyAuthClientId"
 $summaryLines += ""
 $summaryLines += '## Resources Created'
-$summaryLines += "- Container App Job: $(if ($containerJobResource) { $containerJobResource.name } else { 'not found' })"
-$summaryLines += "- Container App Environment: $(if ($environmentResource) { $environmentResource.name } else { 'not found' })"
+$summaryLines += "- Function App: $(if ($functionAppResource) { $functionAppResource.name } else { 'not found' })"
+$summaryLines += "- Function Hosting Plan: $(if ($hostingPlanResource) { $hostingPlanResource.name } else { 'not found' })"
 $summaryLines += "- Storage Account: $(if ($storageResource) { $storageResource.name } else { 'not found' })"
-$summaryLines += "- Container Registry: $(if ($acrResource) { $acrResource.name } else { 'not deployed' })"
-$summaryLines += "- App Service Plan: $(if ($planResource) { $planResource.name } else { 'not deployed' })"
+$summaryLines += "- App Service Plan: $(if ($webAppPlanResource) { $webAppPlanResource.name } else { 'not deployed' })"
 $summaryLines += "- Web App: $(if ($webAppResource) { $webAppResource.name } else { 'not deployed' })"
 $summaryLines += ""
 $summaryLines += '## How Components Interoperate'
-$summaryLines += '- Container App Job executes Maester tests on the weekly schedule and on-demand validation runs.'
-$summaryLines += '- The runner script is mounted from Azure Files into the container at /mnt/scripts.'
-$summaryLines += '- Container App Job managed identity calls Microsoft Graph using the configured permission profile.'
-$summaryLines += '- Container App Job managed identity uploads gzip-compressed dated reports to storage container `archive` and `latest.html` to `latest`.'
-if ($acrResource) {
-  $summaryLines += '- Azure Container Registry stores a custom pre-built image with Maester and dependencies for faster startup.'
-}
+$summaryLines += '- Function App executes Maester tests on a weekly timer schedule (Sunday 9am UTC) and on-demand via admin trigger.'
+$summaryLines += '- Managed dependencies (requirements.psd1) handle module installation automatically on cold start.'
+$summaryLines += '- Function App managed identity calls Microsoft Graph using the configured permission profile.'
+$summaryLines += '- Function App managed identity uploads gzip-compressed dated reports to storage container `archive` and `latest.html` to `latest`.'
 if ($webAppResource) {
   $summaryLines += '- Web App hosts the latest dashboard experience and is protected by Easy Auth + Entra security group restriction.'
   $summaryLines += "- Optional custom DNS setup guidance: $customDnsDocsUrl"
@@ -302,9 +335,12 @@ else {
 }
 $summaryLines += ""
 $summaryLines += '## Validation Results'
-$summaryLines += "- Job validation status: $(if ($validationResult.ValidationPassed) { 'Passed' } else { 'Failed' })"
-$summaryLines += "- Job execution name: $($validationResult.ExecutionName)"
-$summaryLines += "- Job final status: $($validationResult.FinalStatus)"
+$validationPassed = if ($validationResult.ValidationPassed -is [bool]) { if ($validationResult.ValidationPassed) { 'Passed' } else { 'Failed' } } else { $validationResult.ValidationPassed }
+$summaryLines += "- Function validation status: $validationPassed"
+if ($validationResult.PSObject.Properties.Match('FunctionAppName').Count -gt 0) {
+  $summaryLines += "- Function app name: $($validationResult.FunctionAppName)"
+}
+$summaryLines += "- Final status: $($validationResult.FinalStatus)"
 $summaryLines += "- Validation completed at: $($validationResult.CompletedAt)"
 
 Set-Content -Path $summaryPath -Value ($summaryLines -join [Environment]::NewLine) -Encoding utf8

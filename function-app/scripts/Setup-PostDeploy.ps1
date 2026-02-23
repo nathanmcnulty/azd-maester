@@ -32,7 +32,11 @@ param(
   [switch]$IncludeAzure,
 
   [Parameter(Mandatory = $false)]
-  [string[]]$AzureScopes
+  [string[]]$AzureScopes,
+
+  [Parameter(Mandatory = $false)]
+  [ValidateSet('FC1', 'B1', 'Y1')]
+  [string]$Plan
 )
 
 Set-StrictMode -Version Latest
@@ -104,6 +108,10 @@ if (-not $SecurityGroupObjectId) {
 }
 if (-not $SecurityGroupDisplayName -and $env:SECURITY_GROUP_DISPLAY_NAME) {
   $SecurityGroupDisplayName = $env:SECURITY_GROUP_DISPLAY_NAME
+}
+
+if (-not $PSBoundParameters.ContainsKey('Plan') -or [string]::IsNullOrWhiteSpace($Plan)) {
+  $Plan = if ($env:FUNCTION_APP_PLAN) { $env:FUNCTION_APP_PLAN.Trim() } else { 'FC1' }
 }
 
 if (-not $PSBoundParameters.ContainsKey('IncludeExchange')) {
@@ -233,35 +241,34 @@ else {
 }
 
 # ──────────────────────────────────────────────
-# Discover Automation Account and get managed identity principal
+# Discover Function App and get managed identity principal
 # ──────────────────────────────────────────────
 
-$automationQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Automation/automationAccounts?api-version=2023-11-01"
-$automationResponse = Invoke-AzRestMethod -Method GET -Path $automationQuery
-$automationPayload = $automationResponse.Content | ConvertFrom-Json
-if (-not $automationPayload.value -or $automationPayload.value.Count -eq 0) {
-  throw "No Automation Account resources were found in resource group '$resolvedResourceGroupName'."
+$sitesQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Web/sites?api-version=2023-12-01"
+$sitesResponse = Invoke-AzRestMethod -Method GET -Path $sitesQuery
+$sitesPayload = $sitesResponse.Content | ConvertFrom-Json
+if (-not $sitesPayload.value -or $sitesPayload.value.Count -eq 0) {
+  throw "No Web App / Function App resources were found in resource group '$resolvedResourceGroupName'."
 }
 
-$preferredAutomationAccountName = "aa-$($EnvironmentName.ToLower())"
-$automationAccount = @($automationPayload.value | Where-Object { $_.name -eq $preferredAutomationAccountName }) | Select-Object -First 1
-if (-not $automationAccount) {
-  $foundNames = @($automationPayload.value | ForEach-Object { $_.name } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+$functionApp = @($sitesPayload.value | Where-Object { $_.kind -like '*functionapp*' }) | Select-Object -First 1
+if (-not $functionApp) {
+  $foundNames = @($sitesPayload.value | ForEach-Object { $_.name } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
   $foundList = if ($foundNames.Count -gt 0) { $foundNames -join ', ' } else { 'none' }
-  throw "Expected Automation Account '$preferredAutomationAccountName' was not found in resource group '$resolvedResourceGroupName'. Found: $foundList. This usually indicates provisioning failed (often quota-related), and setup cannot continue."
+  throw "No Function App was found in resource group '$resolvedResourceGroupName'. Found sites: $foundList. This usually indicates provisioning failed, and setup cannot continue."
 }
 
-$automationAccountName = $automationAccount.name
+$functionAppName = $functionApp.name
 
 $principalId = & "$PSScriptRoot\shared\Get-ManagedIdentityPrincipal.ps1" `
   -SubscriptionId $SubscriptionId `
   -ResourceGroupName $resolvedResourceGroupName `
-  -ProviderNamespace 'Microsoft.Automation' `
-  -ResourceType 'automationAccounts' `
-  -ResourceName $automationAccountName `
-  -ApiVersion '2023-11-01'
+  -ProviderNamespace 'Microsoft.Web' `
+  -ResourceType 'sites' `
+  -ResourceName $functionAppName `
+  -ApiVersion '2023-12-01'
 
-Set-AzdEnvValue -Name 'AUTOMATION_MI_PRINCIPAL_ID' -Value $principalId
+Set-AzdEnvValue -Name 'FUNCTION_APP_MI_PRINCIPAL_ID' -Value $principalId
 
 # ──────────────────────────────────────────────
 # Grant Graph API permissions
@@ -272,7 +279,7 @@ Set-AzdEnvValue -Name 'AUTOMATION_MI_PRINCIPAL_ID' -Value $principalId
   -PrincipalObjectId $principalId `
   -PermissionProfile $PermissionProfile
 
-Write-Host "Automation account '$automationAccountName' managed identity is configured for Maester Graph permissions."
+Write-Host "Function App '$functionAppName' managed identity is configured for Maester Graph permissions."
 
 # ──────────────────────────────────────────────
 # Advanced workload setup (Exchange, Teams, Azure)
@@ -319,10 +326,10 @@ if ($IncludeExchange -and $exchangeSetupStatus -eq 'pending') {
     $newAssignmentId = Grant-ServicePrincipalAppRoleAssignment -PrincipalObjectId $principalId -ResourceAppId $exchangeResourceAppId -AppRoleId $exchangeManageAsAppRoleId
     if ($newAssignmentId) {
       $exoAppRoleAssignmentIds += $newAssignmentId
-      Write-Host 'Assigned Exchange.ManageAsApp to the Automation Account managed identity.'
+      Write-Host 'Assigned Exchange.ManageAsApp to the Function App managed identity.'
     }
     else {
-      Write-Host 'Exchange.ManageAsApp is already assigned to the Automation Account managed identity.'
+      Write-Host 'Exchange.ManageAsApp is already assigned to the Function App managed identity.'
     }
     $exchangeAppRoleOk = $true
   }
@@ -346,7 +353,6 @@ if ($IncludeExchange -and $exchangeSetupStatus -eq 'pending') {
       throw 'ExchangeOnlineManagement module is not available. Install it and rerun setup with -IncludeExchange.'
     }
 
-    # Resolve tenant initial domain for Exchange AccessToken connection
     $exoOrganization = $null
     try {
       $orgResponse = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=verifiedDomains'
@@ -412,10 +418,10 @@ if ($IncludeTeams -and $teamsSetupStatus -eq 'pending') {
     $newTeamsRoleAssignmentId = Test-DirectoryRoleAssignment -PrincipalObjectId $principalId -RoleDisplayName 'Teams Reader'
     if ($newTeamsRoleAssignmentId) {
       $teamsRoleAssignmentIds += $newTeamsRoleAssignmentId
-      Write-Host "Assigned Entra directory role 'Teams Reader' to the Automation Account managed identity."
+      Write-Host "Assigned Entra directory role 'Teams Reader' to the Function App managed identity."
     }
     else {
-      Write-Host "Entra directory role 'Teams Reader' is already assigned to the Automation Account managed identity."
+      Write-Host "Entra directory role 'Teams Reader' is already assigned to the Function App managed identity."
     }
 
     $teamsSetupStatus = 'configured'
@@ -440,7 +446,7 @@ if ($IncludeAzure -and $azureSetupStatus -eq 'pending') {
       $newAzureAssignmentId = Test-AzureReaderRoleAssignment -Scope $scope -PrincipalObjectId $principalId -SubscriptionId $SubscriptionId
       if ($newAzureAssignmentId) {
         $azureRoleAssignmentIds += $newAzureAssignmentId
-        Write-Host "Granted Azure RBAC Reader to Automation managed identity at scope: $scope"
+        Write-Host "Granted Azure RBAC Reader to Function App managed identity at scope: $scope"
       }
       else {
         Write-Host "Azure RBAC Reader already exists or was already satisfied at scope: $scope"
@@ -472,25 +478,23 @@ if ($exoServicePrincipalDisplayName) {
 }
 
 # ──────────────────────────────────────────────
-# Publish runbook to Automation Account
+# Deploy Function App code via zip deploy
 # ──────────────────────────────────────────────
 
-$runbookContentPath = Join-Path -Path $PSScriptRoot -ChildPath 'Invoke-MaesterAutomationRunbook.ps1'
-if (-not (Test-Path -Path $runbookContentPath)) {
-  throw "Runbook content file was not found: $runbookContentPath"
+$deployArgs = @{
+  SubscriptionId    = $SubscriptionId
+  ResourceGroupName = $resolvedResourceGroupName
+  FunctionAppName   = $functionAppName
+  Plan              = $Plan
+}
+if ($IncludeExchange) {
+  $deployArgs['IncludeExchange'] = $true
+}
+if ($IncludeTeams) {
+  $deployArgs['IncludeTeams'] = $true
 }
 
-$runbookName = 'maester-runbook'
-$runbookContent = Get-Content -Path $runbookContentPath -Raw
-$armApiVersion = '2024-10-23'
-
-$draftUri = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName/draft/content?api-version=$armApiVersion"
-Invoke-AzRestMethod -Method PUT -Path $draftUri -Payload $runbookContent | Out-Null
-Write-Host "Uploaded draft content for runbook '$runbookName'."
-
-$publishUri = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName/publish?api-version=$armApiVersion"
-Invoke-AzRestMethod -Method POST -Path $publishUri -Payload '{}' | Out-Null
-Write-Host "Published runbook '$runbookName' with local script content."
+& "$PSScriptRoot\Deploy-FunctionCode.ps1" @deployArgs
 
 # ──────────────────────────────────────────────
 # Easy Auth on optional Web App
@@ -500,7 +504,9 @@ $webAppsQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResource
 $webAppsResponse = Invoke-AzRestMethod -Method GET -Path $webAppsQuery
 $webAppsPayload = $webAppsResponse.Content | ConvertFrom-Json
 
-if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
+$webAppSites = @($webAppsPayload.value | Where-Object { $_.kind -notlike '*functionapp*' })
+
+if ($webAppSites.Count -gt 0) {
   if (-not $SecurityGroupObjectId -and -not [string]::IsNullOrWhiteSpace($SecurityGroupDisplayName)) {
     Connect-MgGraphSilent -TenantId $TenantId -Scopes 'Group.Read.All','Directory.Read.All'
 
@@ -576,9 +582,9 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
   Connect-MgGraphSilent -TenantId $TenantId -Scopes 'Application.ReadWrite.All','Directory.Read.All','DelegatedPermissionGrant.ReadWrite.All'
 
   $preferredWebAppName = "app-maester-$($EnvironmentName.ToLower())"
-  $webApp = @($webAppsPayload.value | Where-Object { $_.name -eq $preferredWebAppName }) | Select-Object -First 1
+  $webApp = @($webAppSites | Where-Object { $_.name -eq $preferredWebAppName }) | Select-Object -First 1
   if (-not $webApp) {
-    $webApp = $webAppsPayload.value[0]
+    $webApp = $webAppSites[0]
   }
 
   $webAppName = $webApp.name

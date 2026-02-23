@@ -1,2 +1,3 @@
 ﻿# Ignore the .resources folder
 .resources/
+/*/outputs/*.md

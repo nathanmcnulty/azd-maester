@@ -32,10 +32,6 @@ param(
   [string]$WebAppSku = 'F1',
 
   [Parameter(Mandatory = $false)]
-  [Alias('ACR')]
-  [switch]$IncludeACR,
-
-  [Parameter(Mandatory = $false)]
   [ValidateSet('Minimal', 'Extended')]
   [string]$PermissionProfile,
 
@@ -47,6 +43,10 @@ param(
 
   [Parameter(Mandatory = $false)]
   [string]$TenantId,
+
+  [Parameter(Mandatory = $false)]
+  [ValidateSet('FC1', 'B1', 'Y1')]
+  [string]$Plan = 'FC1',
 
   [Parameter(Mandatory = $false)]
   [string]$MailRecipient = ''
@@ -73,10 +73,6 @@ if (-not $PSBoundParameters.ContainsKey('IncludeTeams')) {
 
 if (-not $PSBoundParameters.ContainsKey('IncludeAzure')) {
   $IncludeAzure = $false
-}
-
-if (-not $PSBoundParameters.ContainsKey('IncludeACR')) {
-  $IncludeACR = $false
 }
 
 if (-not $PSBoundParameters.ContainsKey('PermissionProfile') -or [string]::IsNullOrWhiteSpace($PermissionProfile)) {
@@ -115,10 +111,10 @@ Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_WEB_APP', $IncludeWebApp.ToString
 Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_EXCHANGE', $IncludeExchange.ToString().ToLower()) -Operation 'set include exchange'
 Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_TEAMS', $IncludeTeams.ToString().ToLower()) -Operation 'set include teams'
 Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_AZURE', $IncludeAzure.ToString().ToLower()) -Operation 'set include azure'
-Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_ACR', $IncludeACR.ToString().ToLower()) -Operation 'set include acr'
 Invoke-Azd -Arguments @('env', 'set', 'WEB_APP_SKU', $WebAppSku) -Operation 'set web app sku'
 Invoke-Azd -Arguments @('env', 'set', 'PERMISSION_PROFILE', $PermissionProfile) -Operation 'set permission profile'
-Invoke-Azd -Arguments @('env', 'set', 'VALIDATE_JOB_ON_PROVISION', 'true') -Operation 'set postprovision job validation'
+Invoke-Azd -Arguments @('env', 'set', 'VALIDATE_FUNCTION_ON_PROVISION', 'true') -Operation 'set postprovision function validation'
+Invoke-Azd -Arguments @('env', 'set', 'FUNCTION_APP_PLAN', $Plan) -Operation 'set function app plan'
 Invoke-Azd -Arguments @('env', 'set', 'MAIL_RECIPIENT', $MailRecipient) -Operation 'set mail recipient'
 
 $effectiveAzureScopes = @()
@@ -139,12 +135,12 @@ if ($IncludeWebApp) {
 Write-Host "Environment '$EnvironmentName' is ready."
 Write-Host "Resource group: $resourceGroupName"
 Write-Host ("Web app enabled: {0}" -f $IncludeWebApp.ToString().ToLower())
-Write-Host ("Include ACR: {0}" -f $IncludeACR.ToString().ToLower())
 Write-Host ("Include Exchange: {0}" -f $IncludeExchange.ToString().ToLower())
 Write-Host ("Include Teams: {0}" -f $IncludeTeams.ToString().ToLower())
 Write-Host ("Include Azure: {0}" -f $IncludeAzure.ToString().ToLower())
 Write-Host "Azure RBAC scopes: $azureScopesSerialized"
 Write-Host "Permission profile: $PermissionProfile"
+Write-Host "Function App plan: $Plan"
 Write-Host "Mail recipient: $(if ([string]::IsNullOrWhiteSpace($MailRecipient)) { '(none)' } else { $MailRecipient })"
 Write-Host 'Validate on provision: true'
 Write-Host 'Next command: azd provision --no-prompt --no-state'

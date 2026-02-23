@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "includeWebAppOption": {
+      "value": "${INCLUDE_WEB_APP}"
+    },
+    "includeExchangeOption": {
+      "value": "${INCLUDE_EXCHANGE}"
+    },
+    "includeTeamsOption": {
+      "value": "${INCLUDE_TEAMS}"
+    },
+    "includeAzureOption": {
+      "value": "${INCLUDE_AZURE}"
+    },
+    "mailRecipient": {
+      "value": "${MAIL_RECIPIENT}"
+    },
+    "webAppSkuName": {
+      "value": "${WEB_APP_SKU}"
+    },
+    "functionAppPlan": {
+      "value": "${FUNCTION_APP_PLAN}"
+    }
+  }
+}

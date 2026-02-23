@@ -42,7 +42,10 @@ param(
   [string]$SecurityGroupDisplayName,
 
   [Parameter(Mandatory = $false)]
-  [string]$TenantId
+  [string]$TenantId,
+
+  [Parameter(Mandatory = $false)]
+  [string]$MailRecipient = ''
 )
 
 Set-StrictMode -Version Latest
@@ -50,6 +53,7 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
+Import-Module "$PSScriptRoot\shared\Maester-Helpers.psm1" -Force
 
 if (-not $PSBoundParameters.ContainsKey('IncludeWebApp')) {
   $IncludeWebApp = $false
@@ -83,22 +87,6 @@ else {
   "rg-$($EnvironmentName.ToLower())-$normalizedLocation"
 }
 
-function Invoke-Azd {
-  param(
-    [Parameter(Mandatory = $true)]
-    [AllowEmptyString()]
-    [string[]]$Arguments,
-
-    [Parameter(Mandatory = $true)]
-    [string]$Operation
-  )
-
-  & azd @Arguments
-  if ($LASTEXITCODE -ne 0) {
-    throw "azd command failed during: $Operation"
-  }
-}
-
 $envNewOutput = & azd env new $EnvironmentName --subscription $SubscriptionId --location $Location --no-prompt 2>&1
 if ($LASTEXITCODE -ne 0) {
   $alreadyExists = $envNewOutput | Where-Object { $_ -match 'already exists' }
@@ -109,8 +97,10 @@ if ($LASTEXITCODE -ne 0) {
     $envNewOutput | ForEach-Object { Write-Host $_ }
     throw "azd env new failed for environment '$EnvironmentName'."
   }
-  Invoke-Azd -Arguments @('env', 'select', $EnvironmentName) -Operation 'env select existing environment'
 }
+
+# Always explicitly select the target environment to ensure it is the active default
+Invoke-Azd -Arguments @('env', 'select', $EnvironmentName) -Operation 'env select target environment'
 
 Invoke-Azd -Arguments @('env', 'set', 'AZURE_RESOURCE_GROUP', $resourceGroupName) -Operation 'set resource group'
 Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_WEB_APP', $IncludeWebApp.ToString().ToLower()) -Operation 'set include web app'
@@ -120,6 +110,7 @@ Invoke-Azd -Arguments @('env', 'set', 'INCLUDE_AZURE', $IncludeAzure.ToString().
 Invoke-Azd -Arguments @('env', 'set', 'WEB_APP_SKU', $WebAppSku) -Operation 'set web app sku'
 Invoke-Azd -Arguments @('env', 'set', 'PERMISSION_PROFILE', $PermissionProfile) -Operation 'set permission profile'
 Invoke-Azd -Arguments @('env', 'set', 'VALIDATE_RUNBOOK_ON_PROVISION', 'true') -Operation 'set postprovision runbook validation'
+Invoke-Azd -Arguments @('env', 'set', 'MAIL_RECIPIENT', $MailRecipient) -Operation 'set mail recipient'
 
 $effectiveAzureScopes = @()
 if ($IncludeAzure -and $AzureScopes -and $AzureScopes.Count -gt 0) {
@@ -144,5 +135,6 @@ Write-Host ("Include Teams: {0}" -f $IncludeTeams.ToString().ToLower())
 Write-Host ("Include Azure: {0}" -f $IncludeAzure.ToString().ToLower())
 Write-Host "Azure RBAC scopes: $azureScopesSerialized"
 Write-Host "Permission profile: $PermissionProfile"
+Write-Host "Mail recipient: $(if ([string]::IsNullOrWhiteSpace($MailRecipient)) { '(none)' } else { $MailRecipient })"
 Write-Host 'Validate on provision: true'
 Write-Host 'Next command: azd provision --no-prompt --no-state'

@@ -134,7 +134,7 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 
 ## Runtime behavior
 
-- Weekly schedule (Sunday midnight UTC)
+- Weekly schedule (Sunday midnight UTC). To run at a different time or frequency, edit the `cronExpression` in `infra/main.bicep` (e.g. `'30 6 * * 1'` for Monday 6:30 UTC), then re-run `azd provision`.
 - Default image: `mcr.microsoft.com/powershell:lts-mariner-2.0` (modules installed at startup)
 - With `-IncludeACR`: custom image with modules pre-installed (faster startup)
 - Runner script is always mounted from Azure Files (never baked into image) for easy updates

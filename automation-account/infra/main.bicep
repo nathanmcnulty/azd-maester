@@ -6,9 +6,6 @@ param location string = resourceGroup().location
 @description('Environment name from azd')
 param environmentName string = 'dev'
 
-@description('Schedule start time in ISO 8601 format')
-param scheduleStartTime string = dateTimeAdd(utcNow(), 'PT15M')
-
 @description('Optional user-assigned managed identity resource id')
 param userAssignedIdentityResourceId string = ''
 
@@ -39,6 +36,10 @@ param enableResourceLocks bool = true
 @description('Optional custom tags merged onto top-level resources')
 param customTags object = {}
 
+@description('Deployment timestamp used to compute a future schedule start time')
+param deploymentTimestamp string = utcNow()
+
+// Standardized parameters and tags for consistency with function-app and container-app-job
 var automationAccountName = 'aa-${toLower(environmentName)}'
 var scheduleName = 'maester-weekly-sunday'
 var runbookName = 'maester-runbook'
@@ -97,6 +98,9 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     defaultToOAuthAuthentication: true
     accessTier: 'Hot'
   }
+  dependsOn: [
+    automationAccount
+  ]
 }
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = if (includeWebApp) {
@@ -111,6 +115,9 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = if (includeWebA
   properties: {
     reserved: true
   }
+  dependsOn: [
+    automationAccount
+  ]
 }
 
 resource webApp 'Microsoft.Web/sites@2023-12-01' = if (includeWebApp) {
@@ -475,7 +482,7 @@ resource schedule 'Microsoft.Automation/automationAccounts/schedules@2023-11-01'
   name: scheduleName
   parent: automationAccount
   properties: {
-    startTime: scheduleStartTime
+    startTime: dateTimeAdd(deploymentTimestamp, 'P7D')
     expiryTime: '2099-12-31T23:59:00Z'
     interval: 1
     frequency: 'Week'

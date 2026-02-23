@@ -32,6 +32,7 @@ $extendedAppRoleValues = @(
   'DeviceManagementRBAC.Read.All',
   'PrivilegedAccess.Read.AzureAD',
   'ReportSettings.Read.All',
+  'RoleEligibilitySchedule.Read.Directory',
   'SecurityIdentitiesHealth.Read.All',
   'SecurityIdentitiesSensors.Read.All',
   'SharePointTenantSettings.Read.All',

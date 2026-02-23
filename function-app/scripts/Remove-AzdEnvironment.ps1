@@ -25,7 +25,7 @@ $resourceGroupName = $null
 $subscriptionId = $null
 $easyAuthAppObjectId = $null
 $easyAuthAppClientId = $null
-$containerJobMiPrincipalId = $null
+$functionAppMiPrincipalId = $null
 $teamsRoleAssignmentIdsJson = $null
 $azureRoleAssignmentIdsJson = $null
 $exoAppRoleAssignmentIdsJson = $null
@@ -36,7 +36,7 @@ if ($LASTEXITCODE -eq 0) {
   $subscriptionId = Get-EnvValue -Lines $envValues -Name 'AZURE_SUBSCRIPTION_ID'
   $easyAuthAppObjectId = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID'
   $easyAuthAppClientId = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_CLIENT_ID'
-  $containerJobMiPrincipalId = Get-EnvValue -Lines $envValues -Name 'CONTAINER_JOB_MI_PRINCIPAL_ID'
+  $functionAppMiPrincipalId = Get-EnvValue -Lines $envValues -Name 'FUNCTION_APP_MI_PRINCIPAL_ID'
   $teamsRoleAssignmentIdsJson = Get-EnvValue -Lines $envValues -Name 'TEAMS_READER_ROLE_ASSIGNMENT_IDS'
   $azureRoleAssignmentIdsJson = Get-EnvValue -Lines $envValues -Name 'AZURE_ROLE_ASSIGNMENT_IDS'
   $exoAppRoleAssignmentIdsJson = Get-EnvValue -Lines $envValues -Name 'EXO_APPROLE_ASSIGNMENT_IDS'
@@ -76,14 +76,14 @@ if (@($azureRoleAssignmentIds).Count -gt 0) {
   }
 }
 
-if (-not [string]::IsNullOrWhiteSpace($containerJobMiPrincipalId) -and @($exoAppRoleAssignmentIds).Count -gt 0) {
+if (-not [string]::IsNullOrWhiteSpace($functionAppMiPrincipalId) -and @($exoAppRoleAssignmentIds).Count -gt 0) {
   Write-Host 'Removing Exchange appRoleAssignments created by this environment...'
   foreach ($assignmentId in @($exoAppRoleAssignmentIds)) {
     if ([string]::IsNullOrWhiteSpace($assignmentId)) {
       continue
     }
 
-    & az rest --method delete --url "https://graph.microsoft.com/v1.0/servicePrincipals/$containerJobMiPrincipalId/appRoleAssignments/$assignmentId" | Out-Null
+    & az rest --method delete --url "https://graph.microsoft.com/v1.0/servicePrincipals/$functionAppMiPrincipalId/appRoleAssignments/$assignmentId" | Out-Null
     if ($LASTEXITCODE -ne 0) {
       Write-Warning "Failed to remove Exchange appRoleAssignment id '$assignmentId'."
     }
@@ -94,13 +94,11 @@ if (-not [string]::IsNullOrWhiteSpace($exoServicePrincipalDisplayName)) {
   Write-Host "Attempting Exchange RBAC cleanup for '$exoServicePrincipalDisplayName' (best-effort)..."
   try {
     if (Test-ModuleAvailable -ModuleName 'ExchangeOnlineManagement') {
-      # Use az CLI token to avoid interactive login prompts
       $exoToken = $null
       $exoOrganization = $null
       try {
         $exoToken = (az account get-access-token --resource https://outlook.office365.com --query accessToken -o tsv 2>$null)
         if ($exoToken) {
-          # Resolve tenant initial domain required by Connect-ExchangeOnline with AccessToken
           $domainsJson = az rest --method get --url 'https://graph.microsoft.com/v1.0/organization?$select=verifiedDomains' 2>$null
           if ($domainsJson) {
             $orgData = $domainsJson | ConvertFrom-Json
@@ -235,7 +233,6 @@ if ($KeepEnvironment) {
   Clear-AzdEnvironmentValue -Name 'INCLUDE_EXCHANGE'
   Clear-AzdEnvironmentValue -Name 'INCLUDE_TEAMS'
   Clear-AzdEnvironmentValue -Name 'INCLUDE_AZURE'
-  Clear-AzdEnvironmentValue -Name 'INCLUDE_ACR'
   Clear-AzdEnvironmentValue -Name 'AZURE_RBAC_SCOPES'
   Clear-AzdEnvironmentValue -Name 'SETUP_EXCHANGE_STATUS'
   Clear-AzdEnvironmentValue -Name 'SETUP_TEAMS_STATUS'
@@ -244,7 +241,7 @@ if ($KeepEnvironment) {
   Clear-AzdEnvironmentValue -Name 'TEAMS_READER_ROLE_ASSIGNMENT_IDS'
   Clear-AzdEnvironmentValue -Name 'AZURE_ROLE_ASSIGNMENT_IDS'
   Clear-AzdEnvironmentValue -Name 'EXO_SERVICE_PRINCIPAL_DISPLAY_NAME'
-  Clear-AzdEnvironmentValue -Name 'CONTAINER_JOB_MI_PRINCIPAL_ID'
+  Clear-AzdEnvironmentValue -Name 'FUNCTION_APP_MI_PRINCIPAL_ID'
 }
 
 Write-Host "Environment removal completed for '$EnvironmentName'."

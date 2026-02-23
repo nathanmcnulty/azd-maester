@@ -150,6 +150,51 @@ if ($LASTEXITCODE -eq 0) {
 
 Write-Host 'Running postprovision runbook validation...'
 
+# When Exchange or Teams permissions were just provisioned, poll Graph API
+# to verify the app role assignments are visible before triggering validation.
+# This uses active polling that proceeds as soon as permissions are verified.
+$needsReplicationWait = $false
+if ($exchangeSetupStatusFromEnv -eq 'configured' -or $teamsSetupStatusFromEnv -eq 'configured') {
+  $needsReplicationWait = $true
+}
+if ($needsReplicationWait) {
+  # Retrieve the managed identity principal ID from azd env
+  $miPrincipalId = Get-EnvValue -Lines $envValues -Name 'AUTOMATION_MI_PRINCIPAL_ID'
+  if ($miPrincipalId) {
+    Import-Module Microsoft.Graph.Authentication -Force -ErrorAction SilentlyContinue
+    $pollInterval = 15
+    $maxWaitSeconds = 180
+    $elapsed = 0
+    $confirmed = $false
+    Write-Host "Polling Graph API to verify Exchange/Teams permission assignments (up to ${maxWaitSeconds}s)..."
+    while ($elapsed -lt $maxWaitSeconds) {
+      try {
+        $assignments = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$miPrincipalId/appRoleAssignments" -ErrorAction Stop
+        $assignedRoles = @($assignments.value | ForEach-Object { $_.appRoleId })
+        # Exchange.ManageAsApp role ID: dc50a0fb-09a3-484d-be87-e023b12c6440
+        $exoReady = ($exchangeSetupStatusFromEnv -ne 'configured') -or ($assignedRoles -contains 'dc50a0fb-09a3-484d-be87-e023b12c6440')
+        # Check for any Teams-related app role assignment
+        $teamsReady = ($teamsSetupStatusFromEnv -ne 'configured') -or ($assignedRoles.Count -gt 0)
+        if ($exoReady -and $teamsReady) {
+          Write-Host "  Permission assignments confirmed in Graph after ${elapsed}s."
+          $confirmed = $true
+          break
+        }
+      } catch {
+        Write-Verbose "  Graph poll attempt failed: $($_.Exception.Message)"
+      }
+      Start-Sleep -Seconds $pollInterval
+      $elapsed += $pollInterval
+      Write-Host "  Waiting for permission replication... (${elapsed}s elapsed)"
+    }
+    if (-not $confirmed) {
+      Write-Warning "Permission verification timed out after ${maxWaitSeconds}s. Proceeding to validation (retry logic in runbook will handle any remaining delay)."
+    }
+  } else {
+    Write-Warning 'Managed identity principal ID not found in environment. Skipping permission verification polling.'
+  }
+}
+
 $automationAccountName = "aa-$($EnvironmentName.ToLower())"
 $testParams = @{
   SubscriptionId       = $SubscriptionId

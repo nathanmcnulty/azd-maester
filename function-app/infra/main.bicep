@@ -6,9 +6,6 @@ param location string = resourceGroup().location
 @description('Environment name from azd')
 param environmentName string = 'dev'
 
-@description('Container image to use for the Maester job')
-param imageName string = 'mcr.microsoft.com/powershell:lts-mariner-2.0'
-
 @description('Optional user-assigned managed identity resource id')
 param userAssignedIdentityResourceId string = ''
 
@@ -30,22 +27,31 @@ param includeAzureOption string = 'false'
 @description('Optional Web App SKU for hosting report access portal')
 param webAppSkuName string = 'F1'
 
-@description('Deploy Azure Container Registry and build custom Maester image')
-param includeACROption string = 'false'
-
 @description('Enable can-not-delete locks on key resources')
 param enableResourceLocks bool = true
+
+@description('Function App hosting plan SKU: FC1 (Flex Consumption), B1 (App Service Basic), Y1 (Consumption)')
+@allowed(['FC1', 'B1', 'Y1'])
+param functionAppPlan string = 'FC1'
 
 @description('Optional custom tags merged onto top-level resources')
 param customTags object = {}
 
-// Standardized parameters and tags for consistency with automation-account and function-app
-var managedEnvironmentName = 'cae-${toLower(environmentName)}'
-var containerAppJobName = 'caj-maester-${toLower(environmentName)}'
+
+var defaultTags = {
+  workload: 'maester'
+  solution: 'function-app'
+  environment: toLower(environmentName)
+  managedBy: 'azd'
+}
+var resourceTags = union(defaultTags, customTags)
+
 var resourceSuffix = toLower(uniqueString(resourceGroup().id, environmentName))
 var storageAccountName = 'stmaester${resourceSuffix}'
-var acrName = 'crmaester${resourceSuffix}'
-var fileShareName = 'scripts'
+var hostingPlanName = 'plan-${toLower(environmentName)}'
+var functionAppName = 'func-maester-${substring(resourceSuffix, 0, 12)}'
+var logAnalyticsName = 'log-maester-${substring(resourceSuffix, 0, 12)}'
+var appInsightsName = 'appi-maester-${substring(resourceSuffix, 0, 12)}'
 var storageBlobDataContributorRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
@@ -54,24 +60,12 @@ var websiteContributorRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'de139f84-1756-47ae-9be6-808fbbe84772'
 )
-var acrPullRoleId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  '7f951dda-4ed3-4680-a7ca-43fe172d538d'
-)
 var appServicePlanName = 'asp-${toLower(environmentName)}'
 var webAppName = 'app-maester-${resourceSuffix}'
 var includeWebApp = toLower(includeWebAppOption) == 'true'
-var includeACR = toLower(includeACROption) == 'true'
-var defaultTags = {
-  workload: 'maester'
-  solution: 'container-app-job'
-  environment: toLower(environmentName)
-  managedBy: 'azd'
-}
-var resourceTags = union(defaultTags, customTags)
 
 // ──────────────────────────────────────────────
-// Storage Account (Azure Files for script mount + Blob for reports)
+// Storage Account (Blob for reports + Function App internal storage)
 // ──────────────────────────────────────────────
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -86,22 +80,9 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: true // Required for Azure Files volume mount in Container App Environment
+    allowSharedKeyAccess: true // Required for AzureWebJobsStorage connection string
     defaultToOAuthAuthentication: true
     accessTier: 'Hot'
-  }
-}
-
-resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2023-05-01' = {
-  name: 'default'
-  parent: storageAccount
-}
-
-resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-05-01' = {
-  name: fileShareName
-  parent: fileService
-  properties: {
-    shareQuota: 1
   }
 }
 
@@ -128,6 +109,14 @@ resource containerArchive 'Microsoft.Storage/storageAccounts/blobServices/contai
 
 resource containerLatest 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   name: 'latest'
+  parent: blobService
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+resource containerDeploymentPackage 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = if (isFlexConsumption) {
+  name: 'deploymentpackage'
   parent: blobService
   properties: {
     publicAccess: 'None'
@@ -171,35 +160,184 @@ resource storageManagementPolicy 'Microsoft.Storage/storageAccounts/managementPo
 }
 
 // ──────────────────────────────────────────────
-// Container App Environment and Job
+// Application Insights + Log Analytics
 // ──────────────────────────────────────────────
 
-resource managedEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: managedEnvironmentName
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: logAnalyticsName
   location: location
   tags: resourceTags
   properties: {
-    zoneRedundant: false
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
   }
 }
 
-resource managedEnvironmentStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = {
-  name: 'scriptstorage'
-  parent: managedEnvironment
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  tags: resourceTags
+  kind: 'web'
   properties: {
-    azureFile: {
-      accountName: storageAccount.name
-      accountKey: storageAccount.listKeys().keys[0].value
-      shareName: fileShare.name
-      accessMode: 'ReadOnly'
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalyticsWorkspace.id
+    RetentionInDays: 30
+  }
+}
+
+// ──────────────────────────────────────────────
+// Function App (Linux, PowerShell 7.4)
+// Plan varies by functionAppPlan parameter:
+//   Y1 = Consumption (Dynamic, 10-min timeout max)
+//   B1 = App Service Basic (Dedicated, unlimited timeout)
+//   FC1 = Flex Consumption (Serverless, 30-min+ timeout, no managed deps)
+// ──────────────────────────────────────────────
+
+var isConsumptionPlan = functionAppPlan == 'Y1'
+var isFlexConsumption = functionAppPlan == 'FC1'
+var isDedicatedPlan = !isConsumptionPlan && !isFlexConsumption
+
+resource hostingPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
+  name: hostingPlanName
+  location: location
+  tags: resourceTags
+  sku: isConsumptionPlan
+    ? {
+        name: 'Y1'
+        tier: 'Dynamic'
+      }
+    : isFlexConsumption
+      ? {
+          name: 'FC1'
+          tier: 'FlexConsumption'
+        }
+      : {
+          name: functionAppPlan
+          tier: 'Basic'
+        }
+  kind: 'functionapp'
+  properties: {
+    reserved: true
+  }
+}
+
+// FC1 manages runtime/extension version via functionAppConfig, not app settings
+var functionAppFlexOnlySettings = isFlexConsumption
+  ? []
+  : [
+      {
+        name: 'FUNCTIONS_EXTENSION_VERSION'
+        value: '~4'
+      }
+      {
+        name: 'FUNCTIONS_WORKER_RUNTIME'
+        value: 'powershell'
+      }
+    ]
+
+var functionAppBaseAppSettings = union(functionAppFlexOnlySettings, [
+  {
+    name: 'AzureWebJobsStorage'
+    value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
+  }
+  {
+    name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+    value: appInsights.properties.ConnectionString
+  }
+  {
+    name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
+    value: appInsights.properties.InstrumentationKey
+  }
+  {
+    name: 'STORAGE_ACCOUNT_NAME'
+    value: storageAccount.name
+  }
+  {
+    name: 'INCLUDE_EXCHANGE'
+    value: includeExchangeOption
+  }
+  {
+    name: 'INCLUDE_TEAMS'
+    value: includeTeamsOption
+  }
+  {
+    name: 'INCLUDE_AZURE'
+    value: includeAzureOption
+  }
+  {
+    name: 'MAIL_RECIPIENT'
+    value: mailRecipient
+  }
+  {
+    name: 'WEB_APP_NAME'
+    value: includeWebApp ? webAppName : ''
+  }
+  {
+    name: 'WEB_APP_RESOURCE_GROUP_NAME'
+    value: includeWebApp ? resourceGroup().name : ''
+  }
+])
+
+// Consumption (Y1) requires Azure Files content share settings
+var functionAppConsumptionAppSettings = isConsumptionPlan
+  ? [
+      {
+        name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
+        value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
+      }
+      {
+        name: 'WEBSITE_CONTENTSHARE'
+        value: toLower(functionAppName)
+      }
+    ]
+  : []
+
+// siteConfig for non-Flex plans includes linuxFxVersion; FC1 sets runtime via functionAppConfig
+var functionAppSiteConfigBase = {
+  ftpsState: 'Disabled'
+  alwaysOn: isDedicatedPlan
+  appSettings: union(functionAppBaseAppSettings, functionAppConsumptionAppSettings)
+}
+var functionAppSiteConfig = isFlexConsumption
+  ? functionAppSiteConfigBase
+  : union(functionAppSiteConfigBase, { linuxFxVersion: 'PowerShell|7.4' })
+
+var functionAppPropertiesBase = {
+  serverFarmId: hostingPlan.id
+  httpsOnly: true
+  siteConfig: functionAppSiteConfig
+}
+
+// FC1 requires functionAppConfig with deployment storage, scale settings, and runtime
+var functionAppFlexConfig = {
+  functionAppConfig: {
+    deployment: {
+      storage: {
+        type: 'blobContainer'
+        value: '${storageAccount.properties.primaryEndpoints.blob}deploymentpackage'
+        authentication: {
+          type: 'SystemAssignedIdentity'
+        }
+      }
+    }
+    scaleAndConcurrency: {
+      maximumInstanceCount: 40
+      instanceMemoryMB: 2048
+    }
+    runtime: {
+      name: 'powershell'
+      version: '7.4'
     }
   }
 }
 
-resource containerAppJob 'Microsoft.App/jobs@2024-03-01' = {
-  name: containerAppJobName
+resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: functionAppName
   location: location
   tags: resourceTags
+  kind: 'functionapp,linux'
   identity: empty(userAssignedIdentityResourceId)
     ? {
         type: 'SystemAssigned'
@@ -210,108 +348,24 @@ resource containerAppJob 'Microsoft.App/jobs@2024-03-01' = {
           '${userAssignedIdentityResourceId}': {}
         }
       }
+  properties: isFlexConsumption
+    ? union(functionAppPropertiesBase, functionAppFlexConfig)
+    : functionAppPropertiesBase
+}
+
+resource functionAppScmBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = {
+  name: 'scm'
+  parent: functionApp
   properties: {
-    environmentId: managedEnvironment.id
-    configuration: {
-      triggerType: 'Schedule'
-      scheduleTriggerConfig: {
-        cronExpression: '0 0 * * 0'
-        parallelism: 1
-        replicaCompletionCount: 1
-      }
-      replicaRetryLimit: 1
-      replicaTimeout: 3600
-      // ACR registry is configured post-deployment by Build-MaesterImage.ps1 to avoid
-      // a circular dependency: the Job's system identity needs AcrPull before provisioning
-      // can validate ACR access, but AcrPull requires the Job's principalId.
-      registries: []
-    }
-    template: {
-      containers: [
-        {
-          name: 'maester'
-          image: imageName
-          command: [
-            'pwsh'
-            '-File'
-            '/mnt/scripts/Invoke-MaesterContainerJob.ps1'
-          ]
-          env: [
-            {
-              name: 'STORAGE_ACCOUNT_NAME'
-              value: storageAccount.name
-            }
-            {
-              name: 'INCLUDE_EXCHANGE'
-              value: includeExchangeOption
-            }
-            {
-              name: 'INCLUDE_TEAMS'
-              value: includeTeamsOption
-            }
-            {
-              name: 'INCLUDE_AZURE'
-              value: includeAzureOption
-            }
-            {
-              name: 'MAIL_RECIPIENT'
-              value: mailRecipient
-            }
-            {
-              name: 'WEB_APP_NAME'
-              value: includeWebApp ? webAppName : ''
-            }
-            {
-              name: 'WEB_APP_RESOURCE_GROUP_NAME'
-              value: includeWebApp ? resourceGroup().name : ''
-            }
-          ]
-          resources: {
-            cpu: json('1.0')
-            memory: '2Gi'
-          }
-          volumeMounts: [
-            {
-              volumeName: 'scripts'
-              mountPath: '/mnt/scripts'
-            }
-          ]
-        }
-      ]
-      volumes: [
-        {
-          name: 'scripts'
-          storageType: 'AzureFile'
-          storageName: managedEnvironmentStorage.name
-        }
-      ]
-    }
+    allow: false
   }
 }
 
-// ──────────────────────────────────────────────
-// Optional Azure Container Registry
-// ──────────────────────────────────────────────
-
-resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = if (includeACR) {
-  name: acrName
-  location: location
-  tags: resourceTags
-  sku: {
-    name: 'Basic'
-  }
+resource functionAppFtpBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = {
+  name: 'ftp'
+  parent: functionApp
   properties: {
-    adminUserEnabled: false
-  }
-}
-
-resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (includeACR) {
-  name: guid(acr.id, containerAppJob.id, 'AcrPull')
-  scope: acr
-  properties: {
-    roleDefinitionId: acrPullRoleId
-    principalId: containerAppJob.identity.principalId
-    principalType: 'ServicePrincipal'
+    allow: false
   }
 }
 
@@ -319,12 +373,12 @@ resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (
 // Role Assignments
 // ──────────────────────────────────────────────
 
-resource jobStorageBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccount.id, containerAppJob.id, 'StorageBlobDataContributor')
+resource funcStorageBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, functionApp.id, 'StorageBlobDataContributor')
   scope: storageAccount
   properties: {
     roleDefinitionId: storageBlobDataContributorRoleId
-    principalId: containerAppJob.identity.principalId
+    principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -346,7 +400,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = if (includeWebA
     reserved: true
   }
   dependsOn: [
-    containerAppJob
+    functionApp
   ]
 }
 
@@ -395,12 +449,12 @@ resource webAppFtpBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolic
   }
 }
 
-resource jobWebAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (includeWebApp) {
-  name: guid(webApp.id, containerAppJob.id, 'WebsiteContributor')
+resource funcWebAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (includeWebApp) {
+  name: guid(webApp.id, functionApp.id, 'WebsiteContributor')
   scope: webApp
   properties: {
     roleDefinitionId: websiteContributorRoleId
-    principalId: containerAppJob.identity.principalId
+    principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -418,12 +472,12 @@ resource storageDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (enab
   }
 }
 
-resource environmentDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (enableResourceLocks) {
-  name: 'lock-cannot-delete-environment'
-  scope: managedEnvironment
+resource functionAppDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (enableResourceLocks) {
+  name: 'lock-cannot-delete-functionapp'
+  scope: functionApp
   properties: {
     level: 'CanNotDelete'
-    notes: 'Prevents accidental deletion of Maester container environment.'
+    notes: 'Prevents accidental deletion of Maester function app.'
   }
 }
 
@@ -440,11 +494,8 @@ resource webAppDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (inclu
 // Outputs
 // ──────────────────────────────────────────────
 
-output containerAppJobName string = containerAppJob.name
-output containerAppJobPrincipalId string = containerAppJob.identity.principalId
+output functionAppName string = functionApp.name
+output functionAppPrincipalId string = functionApp.identity.principalId
 output storageAccountName string = storageAccount.name
-output managedEnvironmentName string = managedEnvironment.name
-output acrName string = includeACR ? acr.name : ''
-output acrLoginServer string = includeACR ? acr!.properties.loginServer : ''
 output webAppName string = includeWebApp ? webApp.name : ''
 output webAppDefaultHostName string = includeWebApp ? webApp!.properties.defaultHostName : ''

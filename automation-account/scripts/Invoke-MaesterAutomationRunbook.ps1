@@ -182,38 +182,62 @@ if ($includeExchange) {
       }
     }
     catch {
+      Write-Warning ("Could not resolve tenant initial domain for Exchange. Error: {0}" -f $_.Exception.Message)
     }
 
-    try {
-      Connect-ExchangeOnline -ManagedIdentity -ShowBanner:$false | Out-Null
-    }
-    catch {
-      if ($moera) {
-        Connect-ExchangeOnline -ManagedIdentity -Organization $moera -ShowBanner:$false | Out-Null
+    # Retry Exchange connection with backoff to handle permission replication delays.
+    # Exchange.ManageAsApp and directory roles can take 5-30+ minutes to propagate.
+    $exoConnected = $false
+    $exoMaxAttempts = 3
+    $exoRetryDelay = 30
+    for ($exoAttempt = 1; $exoAttempt -le $exoMaxAttempts; $exoAttempt++) {
+      try {
+        try {
+          Connect-ExchangeOnline -ManagedIdentity -ShowBanner:$false | Out-Null
+        }
+        catch {
+          if ($moera) {
+            Connect-ExchangeOnline -ManagedIdentity -Organization $moera -ShowBanner:$false | Out-Null
+          }
+          else {
+            throw
+          }
+        }
+        $exoConnected = $true
+        break
       }
-      else {
-        throw
+      catch {
+        if ($exoAttempt -lt $exoMaxAttempts) {
+          Write-Warning ("Exchange Online connection attempt {0}/{1} failed: {2}. Retrying in {3}s (permissions may still be replicating)..." -f $exoAttempt, $exoMaxAttempts, $_.Exception.Message, $exoRetryDelay)
+          Start-Sleep -Seconds $exoRetryDelay
+          $exoRetryDelay = [Math]::Min($exoRetryDelay * 2, 120)
+        }
+        else {
+          throw
+        }
       }
     }
 
-    Write-Output 'Exchange Online connection established.'
+    if ($exoConnected) {
+      Write-Output 'Exchange Online connection established.'
 
-    # Connect to Security & Compliance PowerShell (IPPS) using managed identity
-    try {
-      $ippsConnectionUri = 'https://ps.compliance.protection.outlook.com/powershell-liveid/'
-      $ippsConnectArgs = @{
-        ManagedIdentity = $true
-        ConnectionUri   = $ippsConnectionUri
-        ShowBanner      = $false
+      # Connect to Security & Compliance PowerShell (IPPS) using managed identity
+      try {
+        $ippsConnectionUri = 'https://ps.compliance.protection.outlook.com/powershell-liveid/'
+        $ippsConnectArgs = @{
+          ManagedIdentity = $true
+          ConnectionUri   = $ippsConnectionUri
+          ShowBanner      = $false
+        }
+        if ($moera) {
+          $ippsConnectArgs['Organization'] = $moera
+        }
+        Connect-ExchangeOnline @ippsConnectArgs | Out-Null
+        Write-Output 'Security & Compliance (IPPS) connection established.'
       }
-      if ($moera) {
-        $ippsConnectArgs['Organization'] = $moera
+      catch {
+        Write-Warning ("Security & Compliance (IPPS) connection failed. Compliance-related tests may be skipped. Error: {0}" -f $_.Exception.Message)
       }
-      Connect-ExchangeOnline @ippsConnectArgs | Out-Null
-      Write-Output 'Security & Compliance (IPPS) connection established.'
-    }
-    catch {
-      Write-Warning ("Security & Compliance (IPPS) connection failed. Compliance-related tests may be skipped. Error: {0}" -f $_.Exception.Message)
     }
   }
   catch {
@@ -223,23 +247,37 @@ if ($includeExchange) {
 
 if ($includeTeams) {
   Write-Output 'IncludeTeams enabled. Attempting Microsoft Teams connection using managed identity.'
-  try {
-    Import-Module MicrosoftTeams -Force
+
+  # Retry Teams connection with backoff to handle Entra directory role replication delays.
+  $teamsMaxAttempts = 3
+  $teamsRetryDelay = 30
+  for ($teamsAttempt = 1; $teamsAttempt -le $teamsMaxAttempts; $teamsAttempt++) {
     try {
-      Connect-MicrosoftTeams -Identity | Out-Null
+      Import-Module MicrosoftTeams -Force
+      try {
+        Connect-MicrosoftTeams -Identity | Out-Null
+      }
+      catch {
+        if ($tenantId) {
+          Connect-MicrosoftTeams -Identity -TenantId $tenantId | Out-Null
+        }
+        else {
+          throw
+        }
+      }
+      Write-Output 'Microsoft Teams connection established.'
+      break
     }
     catch {
-      if ($tenantId) {
-        Connect-MicrosoftTeams -Identity -TenantId $tenantId | Out-Null
+      if ($teamsAttempt -lt $teamsMaxAttempts) {
+        Write-Warning ("Microsoft Teams connection attempt {0}/{1} failed: {2}. Retrying in {3}s (permissions may still be replicating)..." -f $teamsAttempt, $teamsMaxAttempts, $_.Exception.Message, $teamsRetryDelay)
+        Start-Sleep -Seconds $teamsRetryDelay
+        $teamsRetryDelay = [Math]::Min($teamsRetryDelay * 2, 120)
       }
       else {
-        throw
+        Write-Warning ("Microsoft Teams connection failed after {0} attempts. Teams-related tests will be skipped. Last error: {1}" -f $teamsMaxAttempts, $_.Exception.Message)
       }
     }
-    Write-Output 'Microsoft Teams connection established.'
-  }
-  catch {
-    Write-Warning ("Microsoft Teams connection failed. Teams-related tests may be skipped. Error: {0}" -f $_.Exception.Message)
   }
 }
 
@@ -325,16 +363,22 @@ if (-not $testsPath) {
 
 Write-Output "Using Maester test path: $testsPath"
 
-$outputHtmlPath = $null
-Write-Output "Running Invoke-Maester from test path '$testsPath' and discovering generated HTML output under $tempRoot"
+Write-Output "Running Invoke-Maester from test path '$testsPath'"
 
-$maesterInvokeParameters = @{
-  Path           = $testsPath
-  OutputFolder   = $tempRoot
-  NonInteractive = $true
+$pesterConfig = [PesterConfiguration]@{
+  TestRegistry = @{
+    Enabled = $false
+  }
 }
 
-if ($MailRecipient) {
+$maesterInvokeParameters = @{
+  Path                = $testsPath
+  OutputFolder        = $tempRoot
+  NonInteractive      = $true
+  PesterConfiguration = $pesterConfig
+}
+
+if (-not [string]::IsNullOrWhiteSpace($MailRecipient)) {
   $maesterInvokeParameters['MailRecipient'] = $MailRecipient
   $maesterInvokeParameters['MailUserId'] = $MailRecipient
   Write-Output "Email notifications enabled for recipient: $MailRecipient"
@@ -368,24 +412,42 @@ else {
 
 Write-Output "Maester run completed. Report generated successfully."
 
-if ($StorageAccountName) {
+# ──────────────────────────────────────────────
+# Upload results to storage
+# ──────────────────────────────────────────────
+
+if (-not [string]::IsNullOrWhiteSpace($StorageAccountName)) {
   $storageToken = Get-PlainToken -ResourceUrl 'https://storage.azure.com/'
   $timestamp = Get-Date -Format 'yyyy-MM-dd-HHmmss'
 
   $datedArchiveBlob = "maester-report-$timestamp.html.gz"
   $compressedArchivePath = Join-Path -Path $tempRoot -ChildPath $datedArchiveBlob
-  Compress-GzipFile -InputPath $outputHtmlPath -OutputPath $compressedArchivePath
-  Set-BlobContent -AccountName $StorageAccountName -Container $ExportContainer -BlobName $datedArchiveBlob -SourcePath $compressedArchivePath -StorageToken $storageToken -ContentType 'application/gzip' -AccessTier 'Cool' -ContentEncoding 'gzip'
-  Write-Output "Uploaded archived report (gzip): $datedArchiveBlob"
+  try {
+    Compress-GzipFile -InputPath $outputHtmlPath -OutputPath $compressedArchivePath
+    Set-BlobContent -AccountName $StorageAccountName -Container $ExportContainer -BlobName $datedArchiveBlob -SourcePath $compressedArchivePath -StorageToken $storageToken -ContentType 'application/gzip' -AccessTier 'Cool' -ContentEncoding 'gzip'
+    Write-Output "Uploaded archived report (gzip): $datedArchiveBlob"
+  }
+  catch {
+    Write-Warning "Archive upload failed: $($_.Exception.Message)"
+  }
 
-  Set-BlobContent -AccountName $StorageAccountName -Container $DashboardContainer -BlobName 'latest.html' -SourcePath $outputHtmlPath -StorageToken $storageToken -ContentType 'text/html' -AccessTier 'Cool'
-  Write-Output "Uploaded latest report pointer: latest.html"
+  try {
+    Set-BlobContent -AccountName $StorageAccountName -Container $DashboardContainer -BlobName 'latest.html' -SourcePath $outputHtmlPath -StorageToken $storageToken -ContentType 'text/html' -AccessTier 'Cool'
+    Write-Output "Uploaded latest report pointer: latest.html"
+  }
+  catch {
+    Write-Warning "Latest report upload failed: $($_.Exception.Message)"
+  }
 }
 
-if ($WebAppName -and $WebAppResourceGroupName) {
+# ──────────────────────────────────────────────
+# Publish to web app (optional)
+# ──────────────────────────────────────────────
+
+if (-not [string]::IsNullOrWhiteSpace($WebAppName) -and -not [string]::IsNullOrWhiteSpace($WebAppResourceGroupName)) {
   Publish-WebAppContent -AppName $WebAppName -AppResourceGroupName $WebAppResourceGroupName -SourcePath $outputHtmlPath
 }
-elseif ($WebAppName) {
+elseif (-not [string]::IsNullOrWhiteSpace($WebAppName)) {
   Write-Warning "WebAppName is set to '$WebAppName' but WebAppResourceGroupName is missing. Skipping Web App content publish."
 }
 
