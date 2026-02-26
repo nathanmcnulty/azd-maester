@@ -1,0 +1,65 @@
+trigger: none
+pr: none
+
+schedules:
+- cron: "__SCHEDULE_CRON__"
+  displayName: Maester scheduled run
+  always: true
+  branches:
+    include:
+    - __DEFAULT_BRANCH__
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  ServiceConnection: '__SERVICE_CONNECTION__'
+  IncludeExchange: '__INCLUDE_EXCHANGE__'
+  IncludeTeams: '__INCLUDE_TEAMS__'
+  IncludeAzure: '__INCLUDE_AZURE__'
+  IncludeWebApp: '__INCLUDE_WEB_APP__'
+  StorageAccountName: '__STORAGE_ACCOUNT_NAME__'
+  WebAppName: '__WEB_APP_NAME__'
+  WebAppResourceGroup: '__WEB_APP_RESOURCE_GROUP__'
+  TenantId: '__TENANT_ID__'
+  ClientId: '__CLIENT_ID__'
+  MailRecipient: '__MAIL_RECIPIENT__'
+  FailOnTestFailures: '__FAIL_ON_TEST_FAILURES__'
+
+steps:
+- checkout: self
+  fetchDepth: 1
+
+- task: AzurePowerShell@5
+  displayName: Run Maester
+  inputs:
+    azureSubscription: '$(ServiceConnection)'
+    pwsh: true
+    azurePowerShellVersion: LatestVersion
+    ScriptType: FilePath
+    ScriptPath: 'scripts/Invoke-MaesterAzureDevOpsRun.ps1'
+    ScriptArguments: >
+      -IncludeExchange $(IncludeExchange)
+      -IncludeTeams $(IncludeTeams)
+      -IncludeAzure $(IncludeAzure)
+      -IncludeWebApp $(IncludeWebApp)
+      -StorageAccountName "$(StorageAccountName)"
+      -WebAppName "$(WebAppName)"
+      -WebAppResourceGroup "$(WebAppResourceGroup)"
+      -TenantId "$(TenantId)"
+      -ClientId "$(ClientId)"
+      -MailRecipient "$(MailRecipient)"
+      -FailOnTestFailures $(FailOnTestFailures)
+
+- publish: $(System.DefaultWorkingDirectory)/test-results
+  displayName: Publish Maester Html Report
+  artifact: TestResults
+  condition: always()
+
+- task: PublishTestResults@2
+  displayName: Publish Pester Test Results
+  condition: always()
+  inputs:
+    testResultsFormat: NUnit
+    testResultsFiles: '**/test-results.xml'
+    failTaskOnFailedTests: $(FailOnTestFailures)

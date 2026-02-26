@@ -1,4 +1,4 @@
-﻿# azd-maester
+# azd-maester
 
 Production-style `azd` templates for running Maester on Azure with managed identity and minimal operator steps.
 
@@ -7,7 +7,7 @@ Production-style `azd` templates for running Maester on Azure with managed ident
 - `automation-account`: End-to-end scheduled Maester solution (recommended baseline)
 - `container-app-job`: Scheduled Maester execution using Azure Container Apps Jobs
 - `function-app`: Maester execution using a PowerShell Azure Function App
-- `azure-devops`: CI/CD integration guidance for all solution folders
+- `azure-devops`: End-to-end Azure DevOps pipeline automation with workload identity federation
 
 ## Recommended starting point
 
@@ -28,8 +28,8 @@ After `azd init -t <your-template-id>`, choose a folder:
   - `cd function-app`
   - `azd provision`
 - `azure-devops`
-  - `cd <solution-folder>`
-  - `azd pipeline config --provider azdo`
+  - `cd azure-devops`
+  - `./scripts/Start-Setup.ps1 -AdoOrganization <orgName> -AdoProject <projectName>`
 
 For deeper details, use the README in each solution folder.
 
