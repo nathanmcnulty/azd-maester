@@ -28,6 +28,7 @@ $minimalAppRoleValues = @(
 
 $extendedAppRoleValues = @(
   'DeviceManagementConfiguration.Read.All',
+  'DeviceManagementServiceConfig.Read.All',
   'DeviceManagementManagedDevices.Read.All',
   'DeviceManagementRBAC.Read.All',
   'PrivilegedAccess.Read.AzureAD',
