@@ -53,20 +53,38 @@ else {
 $automationAccountName = "aa-$($EnvironmentName.ToLower())"
 
 Write-Host 'Step 1/5: Initialize azd environment defaults'
-& "$PSScriptRoot\Initialize-AzdEnvironment.ps1" `
-  -EnvironmentName $EnvironmentName `
-  -SubscriptionId $SubscriptionId `
-  -Location $Location `
-  -ResourceGroupName $resourceGroupName `
-  -IncludeWebApp:$IncludeWebApp `
-  -WebAppSku $WebAppSku `
-  -PermissionProfile $PermissionProfile `
-  -SecurityGroupObjectId $SecurityGroupObjectId
-
-if (-not [string]::IsNullOrWhiteSpace($MailRecipient)) {
-  & azd env set MAIL_RECIPIENT $MailRecipient
+& azd env select $EnvironmentName --no-prompt 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  & azd env new $EnvironmentName --subscription $SubscriptionId --location $Location --no-prompt | Out-Null
   if ($LASTEXITCODE -ne 0) {
-    throw 'Failed to set MAIL_RECIPIENT in azd environment.'
+    throw "Failed to create azd environment '$EnvironmentName'."
+  }
+}
+
+$envSettings = @{
+  AZURE_SUBSCRIPTION_ID        = $SubscriptionId
+  AZURE_TENANT_ID              = $TenantId
+  AZURE_LOCATION               = $Location
+  AZURE_RESOURCE_GROUP         = $resourceGroupName
+  INCLUDE_WEB_APP              = ([bool]$IncludeWebApp).ToString().ToLower()
+  INCLUDE_EXCHANGE             = 'false'
+  INCLUDE_TEAMS                = 'false'
+  INCLUDE_AZURE                = 'false'
+  AZURE_RBAC_SCOPES            = ''
+  WEB_APP_SKU                  = $WebAppSku
+  PERMISSION_PROFILE           = $PermissionProfile
+  MAIL_RECIPIENT               = if ([string]::IsNullOrWhiteSpace($MailRecipient)) { '' } else { $MailRecipient }
+  VALIDATE_RUNBOOK_ON_PROVISION = 'true'
+}
+
+if ($IncludeWebApp) {
+  $envSettings['SECURITY_GROUP_OBJECT_ID'] = $SecurityGroupObjectId
+}
+
+foreach ($entry in $envSettings.GetEnumerator()) {
+  & azd env set $entry.Key $entry.Value | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to set azd environment value '$($entry.Key)'."
   }
 }
 

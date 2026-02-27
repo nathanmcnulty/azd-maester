@@ -1,13 +1,22 @@
-﻿name: maester-container-app-job
+name: maester-container-app-job
 metadata:
   template: maester-container-app-job@0.0.1
 infra:
   provider: bicep
   path: infra
+workflows:
+  up:
+    - azd: provision
 hooks:
+  preup:
+    shell: pwsh
+    run: ./scripts/Run-AzdPreUp.ps1
   preprovision:
     shell: pwsh
     run: ./scripts/Run-AzdPreProvision.ps1
   postprovision:
     shell: pwsh
     run: ./scripts/Run-AzdPostProvision.ps1
+  predown:
+    shell: pwsh
+    run: ./scripts/Run-AzdPreDown.ps1

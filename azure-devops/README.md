@@ -13,15 +13,21 @@ Deploys a production-style Maester monitoring solution using Azure DevOps Pipeli
 
 After `azd init -t <your-template-id>` and `cd azure-devops`, run:
 
-`./scripts/Start-Setup.ps1 -AdoOrganization <orgName> -AdoProject <projectName>`
+`azd up`
 
-Example with optional web app and advanced scopes:
+During interactive `azd up`, the preprovision wizard prompts for:
 
-`./scripts/Start-Setup.ps1 -AdoOrganization contoso -AdoProject maester -IncludeWebApp -SecurityGroupObjectId <groupObjectId> -IncludeExchange -IncludeTeams -IncludeAzure`
+- Include Web App / Exchange / Teams / Azure
+- Security group object ID (required when Web App is enabled)
+- Azure RBAC scopes (when Azure is enabled)
+- Azure DevOps organization/project (required)
+- Optional mail recipient
+
+For non-interactive runs (`azd up --no-prompt`), if `AZURE_RESOURCE_GROUP` is set, `preup` creates it automatically when missing.
 
 ## What setup does
 
-- Initializes azd environment values and provisions Azure infra.
+- Resolves azd environment values through the preprovision wizard and provisions Azure infra.
 - Creates or reuses Azure Repos repository (default enabled).
 - Creates or reuses Azure DevOps service connection with workload identity federation (`CreationMode=Manual`).
 - Creates or reuses Entra app/service principal and federated credential.
@@ -34,46 +40,23 @@ Example with optional web app and advanced scopes:
 - Renders and pushes pipeline files to Azure Repos.
 - Creates or reuses pipeline and validates first run (default enabled).
 
-## Supported parameters
+## Permission lifecycle
 
-- Common include flags:
-  - `-IncludeExchange`
-  - `-IncludeTeams`
-  - `-IncludeAzure`
-  - `-IncludeWebApp`
-- Web app security restriction:
-  - `-SecurityGroupObjectId` (required when `-IncludeWebApp`)
-  - `-SecurityGroupDisplayName` (optional resolver)
-- Azure DevOps settings:
-  - `-AdoOrganization` (required)
-  - `-AdoProject` (required)
-  - `-AdoRepositoryName` (default: `maester-<env>`)
-  - `-AdoPipelineName` (default: `maester-weekly`)
-  - `-AdoServiceConnectionName` (default: `sc-maester-<env>`)
-  - `-PipelineYamlPath` (default: `/azure-pipelines.yml`)
-  - `-DefaultBranch` (default: `main`)
-  - `-ScheduleCron` (default: `0 0 * * 0`)
-  - `-CreateRepositoryIfMissing` (default: `true`)
-  - `-PushPipelineFiles` (default: `true`)
-  - `-ValidatePipelineRun` (default: `true`)
-- Additional standard options:
-  - `-EnvironmentName`, `-SubscriptionId`, `-Location`, `-ResourceGroupName`
-  - `-PermissionProfile` (`Minimal` or `Extended`)
-  - `-AzureScopes`
-  - `-MailRecipient`
+- Toggling an option from `Yes` to `No` in a later `azd up` run is additive only and does **not** revoke prior assignments.
+- Revocation/best-effort cleanup runs on `azd down` (predown hook).
 
 ## Operations
 
-- Setup (recommended entry point):
-  - `./scripts/Start-Setup.ps1 ...`
-- Remove environment + Azure resources + Azure DevOps artifacts:
-  - `./scripts/Remove-AzdEnvironment.ps1 -EnvironmentName <env>`
-- Remove Azure resources but keep local azd env files:
-  - `./scripts/Remove-AzdEnvironment.ps1 -EnvironmentName <env> -KeepEnvironment`
+- Provision/update:
+  - `azd up -e <env>`
+- Remove environment + Azure resources + Azure DevOps artifacts (includes predown cleanup):
+  - `azd down -e <env> --force --purge`
+- Optionally remove local azd env files:
+  - `azd env remove <env> --force`
 
 ### Teardown behavior
 
-`Remove-AzdEnvironment.ps1` performs best-effort cleanup of:
+`azd down` runs `scripts/Run-AzdPreDown.ps1`, which performs best-effort cleanup of:
 
 - Azure DevOps pipeline
 - Azure DevOps service connection
@@ -90,14 +73,10 @@ Example with optional web app and advanced scopes:
 
 ## Script map
 
-- User entry point: `scripts/Start-Setup.ps1`
-- Environment setup: `scripts/Initialize-AzdEnvironment.ps1`
-- azd hooks: `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`
+- azd hooks: `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
 - Core provisioning: `scripts/Setup-PostDeploy.ps1`
 - Pipeline runtime script (committed to Azure Repos): `scripts/Invoke-MaesterAzureDevOpsRun.ps1`
 - Pipeline validation: `scripts/Invoke-PipelineValidation.ps1`
-- Teardown: `scripts/Remove-AzdEnvironment.ps1`
-- Quick smoke helper (no web app): `run-test-noweb.ps1`
 
 ## Reference docs
 

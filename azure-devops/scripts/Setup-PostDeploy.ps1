@@ -77,13 +77,20 @@ $ErrorActionPreference = 'Stop'
 function Get-EnvValue {
   param(
     [Parameter(Mandatory = $true)]
-    [string[]]$Lines,
+    $Lines,
 
     [Parameter(Mandatory = $true)]
     [string]$Name
   )
 
-  foreach ($line in $Lines) {
+  if ($Lines -is [hashtable]) {
+    if ($Lines.ContainsKey($Name)) {
+      return [string]$Lines[$Name]
+    }
+    return $null
+  }
+
+  foreach ($line in @($Lines)) {
     if ($line -like "$Name=*") {
       return $line.Split('=', 2)[1].Trim('"')
     }
@@ -476,7 +483,7 @@ function Push-RepositoryFiles {
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
 
-Import-Module "$PSScriptRoot/shared/Maester-SetupHelpers.psm1" -Force
+Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-SetupHelpers.psm1') -Force
 Import-Module Az.Accounts -Force
 
 $adopsInstallMessage = "PowerShell module 'ADOPS' is required to configure Azure DevOps. Install now to continue postprovision setup."
@@ -484,7 +491,13 @@ if (-not (Test-ModuleAvailable -ModuleName 'ADOPS' -InstallMessage $adopsInstall
   throw "PowerShell module 'ADOPS' is required for postprovision setup. Install it with: Install-Module ADOPS -Scope CurrentUser -Force -AllowClobber"
 }
 
-$envLines = & azd env get-values
+$envLines = @{}
+try {
+  $envLines = (& azd env get-values --output json 2>$null | ConvertFrom-Json -AsHashtable)
+}
+catch {
+  $envLines = @{}
+}
 
 if (-not $SubscriptionId) {
   $SubscriptionId = if ($env:AZURE_SUBSCRIPTION_ID) { $env:AZURE_SUBSCRIPTION_ID } else { Get-EnvValue -Lines $envLines -Name 'AZURE_SUBSCRIPTION_ID' }
@@ -908,10 +921,13 @@ if ($webAppResource) {
 Set-AzdEnvJsonArray -Name 'AZDO_BASE_ROLE_ASSIGNMENT_IDS' -Values @($baseRoleAssignmentIds)
 
 Write-Host 'Granting Microsoft Graph permissions for Maester...'
-& "$PSScriptRoot\shared\Grant-MaesterGraphPermissions.ps1" `
+$mailRecipientForGraph = if ($env:MAIL_RECIPIENT) { $env:MAIL_RECIPIENT.Trim() } else { '' }
+$includeMailSend = -not [string]::IsNullOrWhiteSpace($mailRecipientForGraph)
+& (Join-Path $PSScriptRoot '..\..\shared\scripts\Grant-MaesterGraphPermissions.ps1') `
   -TenantId $TenantId `
   -PrincipalObjectId $servicePrincipal.Id `
-  -PermissionProfile $PermissionProfile
+  -PermissionProfile $PermissionProfile `
+  -IncludeMailSend $includeMailSend
 
 $exchangeSetupStatus = if ($IncludeExchange) { 'pending' } else { 'disabled' }
 $teamsSetupStatus = if ($IncludeTeams) { 'pending' } else { 'disabled' }

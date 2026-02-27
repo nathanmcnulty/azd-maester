@@ -4,10 +4,10 @@ Production-style `azd` templates for running Maester on Azure with managed ident
 
 ## Solutions
 
-- `automation-account`: End-to-end scheduled Maester solution (recommended baseline)
-- `container-app-job`: Scheduled Maester execution using Azure Container Apps Jobs
-- `function-app`: Maester execution using a PowerShell Azure Function App
-- `azure-devops`: End-to-end Azure DevOps pipeline automation with workload identity federation
+- [automation-account](automation-account\README.md): End-to-end scheduled Maester solution (recommended baseline)
+- [container-app-job](container-app-job\README.md): Scheduled Maester execution using Azure Container Apps Jobs
+- [function-app](function-app\README.md): Maester execution using a PowerShell Azure Function App
+- [azure-devops](azure-devops\README.md): End-to-end Azure DevOps pipeline automation with workload identity federation
 
 ## Recommended starting point
 
@@ -17,25 +17,40 @@ Use `automation-account` first. It has the most complete one-command experience 
 
 After `azd init -t <your-template-id>`, choose a folder:
 
-- `automation-account`
+- ### [automation-account](automation-account\README.md)
   - `cd automation-account`
-  - `./scripts/Start-Setup.ps1 -IncludeWebApp -SecurityGroupObjectId <groupObjectId>`
-  - Optional: add `-IncludeExchange`, `-IncludeTeams`, and/or `-IncludeAzure` for additional data collection.
-- `container-app-job`
+  - `azd up`
+- ### [container-app-job](container-app-job\README.md)
   - `cd container-app-job`
-  - `azd provision`
-- `function-app`
+  - `azd up`
+- ### [function-app](function-app\README.md)
   - `cd function-app`
-  - `azd provision`
-- `azure-devops`
+  - `azd up`
+- ### [azure-devops](azure-devops\README.md)
   - `cd azure-devops`
-  - `./scripts/Start-Setup.ps1 -AdoOrganization <orgName> -AdoProject <projectName>`
+  - `azd up`
 
-For deeper details, use the README in each solution folder.
+`azd up` runs a full interactive preprovision wizard for include flags and required values (for example security group and Azure DevOps org/project).
+
+Non-interactive note (`--no-prompt`): if `AZURE_RESOURCE_GROUP` is set, `preup` creates it automatically when missing.
+
+## Teardown
+
+- Remove resources and run cleanup hooks:
+  - `azd down --force --purge`
+- Optionally remove local environment state:
+  - `azd env remove <env> --force`
+
+## Permission lifecycle
+
+- Switching an include flag from `Yes` to `No` on a later `azd up` does not revoke previously granted permissions.
+- Revocation/best-effort cleanup happens during `azd down` (predown hook), then resources are deleted.
 
 ## Shared conventions
 
 - `azd`-first provisioning and hooks
+- `preprovision` wizard on every interactive `azd up`
+- `predown` cleanup before resource deletion
 - Managed identity by default
 - PowerShell setup scripts use:
   - `Az.Accounts` + `Invoke-AzRestMethod` for Azure control plane

@@ -1,6 +1,12 @@
 ﻿targetScope = 'resourceGroup'
 
 @description('Deployment location')
+@metadata({
+  azd: {
+    type: 'location'
+    default: 'eastus2'
+  }
+})
 param location string = resourceGroup().location
 
 @description('Environment name from azd')
@@ -16,21 +22,66 @@ param userAssignedIdentityResourceId string = ''
 param mailRecipient string = ''
 
 @description('Deploy optional Web App hosting component')
+@allowed([
+  'true'
+  'false'
+])
+@metadata({
+  azd: {
+    default: 'false'
+  }
+})
 param includeWebAppOption string = 'false'
 
 @description('Enable Exchange Online connectivity and permissions for Maester')
+@allowed([
+  'true'
+  'false'
+])
+@metadata({
+  azd: {
+    default: 'false'
+  }
+})
 param includeExchangeOption string = 'false'
 
 @description('Enable Microsoft Teams connectivity and permissions for Maester')
+@allowed([
+  'true'
+  'false'
+])
+@metadata({
+  azd: {
+    default: 'false'
+  }
+})
 param includeTeamsOption string = 'false'
 
 @description('Enable Azure RBAC role assignments for Maester')
+@allowed([
+  'true'
+  'false'
+])
+@metadata({
+  azd: {
+    default: 'false'
+  }
+})
 param includeAzureOption string = 'false'
 
 @description('Optional Web App SKU for hosting report access portal')
 param webAppSkuName string = 'F1'
 
 @description('Deploy Azure Container Registry and build custom Maester image')
+@allowed([
+  'true'
+  'false'
+])
+@metadata({
+  azd: {
+    default: 'false'
+  }
+})
 param includeACROption string = 'false'
 
 @description('Enable can-not-delete locks on key resources')

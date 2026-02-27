@@ -16,6 +16,51 @@ function Get-EnvValue {
   return $null
 }
 
+function Get-AzdEnvironmentValues {
+  param(
+    [Parameter(Mandatory = $false)]
+    [string]$EnvironmentName
+  )
+
+  $args = @('env', 'get-values', '--output', 'json')
+  if (-not [string]::IsNullOrWhiteSpace($EnvironmentName)) {
+    $args += @('--environment', $EnvironmentName)
+  }
+
+  try {
+    $raw = & azd @args 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) {
+      return @{}
+    }
+
+    $parsed = $raw | ConvertFrom-Json -AsHashtable
+    if ($null -eq $parsed) {
+      return @{}
+    }
+
+    return $parsed
+  }
+  catch {
+    Write-Warning "Failed to read azd environment values. Error: $($_.Exception.Message)"
+    return @{}
+  }
+}
+
+function Get-AzdEnvironmentValue {
+  param(
+    [Parameter(Mandatory = $true)]
+    [hashtable]$Values,
+    [Parameter(Mandatory = $true)]
+    [string]$Name
+  )
+
+  if ($Values.ContainsKey($Name) -and -not [string]::IsNullOrWhiteSpace([string]$Values[$Name])) {
+    return [string]$Values[$Name]
+  }
+
+  return $null
+}
+
 function Clear-AzdEnvironmentValue {
   param(
     [Parameter(Mandatory = $true)]

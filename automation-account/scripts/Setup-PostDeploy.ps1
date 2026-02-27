@@ -43,7 +43,7 @@ Set-Location $projectRoot
 
 Import-Module Az.Accounts -Force
 Import-Module Microsoft.Graph.Authentication -Force
-Import-Module "$PSScriptRoot/shared/Maester-SetupHelpers.psm1" -Force
+Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-SetupHelpers.psm1') -Force
 
 
 # ──────────────────────────────────────────────
@@ -253,7 +253,7 @@ if (-not $automationAccount) {
 
 $automationAccountName = $automationAccount.name
 
-$principalId = & "$PSScriptRoot\shared\Get-ManagedIdentityPrincipal.ps1" `
+$principalId = & (Join-Path $PSScriptRoot '..\..\shared\scripts\Get-ManagedIdentityPrincipal.ps1') `
   -SubscriptionId $SubscriptionId `
   -ResourceGroupName $resolvedResourceGroupName `
   -ProviderNamespace 'Microsoft.Automation' `
@@ -267,10 +267,14 @@ Set-AzdEnvValue -Name 'AUTOMATION_MI_PRINCIPAL_ID' -Value $principalId
 # Grant Graph API permissions
 # ──────────────────────────────────────────────
 
-& "$PSScriptRoot\shared\Grant-MaesterGraphPermissions.ps1" `
+$mailRecipientForGraph = if ($env:MAIL_RECIPIENT) { $env:MAIL_RECIPIENT.Trim() } else { '' }
+$includeMailSend = -not [string]::IsNullOrWhiteSpace($mailRecipientForGraph)
+
+& (Join-Path $PSScriptRoot '..\..\shared\scripts\Grant-MaesterGraphPermissions.ps1') `
   -TenantId $TenantId `
   -PrincipalObjectId $principalId `
-  -PermissionProfile $PermissionProfile
+  -PermissionProfile $PermissionProfile `
+  -IncludeMailSend $includeMailSend
 
 Write-Host "Automation account '$automationAccountName' managed identity is configured for Maester Graph permissions."
 

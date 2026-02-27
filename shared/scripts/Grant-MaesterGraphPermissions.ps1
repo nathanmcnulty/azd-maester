@@ -11,14 +11,16 @@ param(
   [string]$PermissionProfile = 'Extended',
 
   [Parameter(Mandatory = $false)]
-  [string[]]$AppRoleValues
+  [string[]]$AppRoleValues,
+
+  [Parameter(Mandatory = $false)]
+  [bool]$IncludeMailSend = $true
 )
 
 $minimalAppRoleValues = @(
   'Directory.Read.All',
   'DirectoryRecommendations.Read.All',
   'IdentityRiskEvent.Read.All',
-  'Mail.Send',
   'Policy.Read.All',
   'Policy.Read.ConditionalAccess',
   'RoleManagement.Read.All',
@@ -41,12 +43,19 @@ $extendedAppRoleValues = @(
 )
 
 if (-not $PSBoundParameters.ContainsKey('AppRoleValues')) {
+  $profileRoles = @()
   if ($PermissionProfile -eq 'Minimal') {
-    $AppRoleValues = $minimalAppRoleValues
+    $profileRoles = @($minimalAppRoleValues)
   }
   else {
-    $AppRoleValues = @($minimalAppRoleValues + $extendedAppRoleValues)
+    $profileRoles = @($minimalAppRoleValues + $extendedAppRoleValues)
   }
+
+  if ($IncludeMailSend) {
+    $profileRoles += 'Mail.Send'
+  }
+
+  $AppRoleValues = $profileRoles
 }
 
 Set-StrictMode -Version Latest

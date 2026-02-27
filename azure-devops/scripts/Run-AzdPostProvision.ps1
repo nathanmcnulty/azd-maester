@@ -29,13 +29,20 @@ $ErrorActionPreference = 'Stop'
 function Get-EnvValue {
   param(
     [Parameter(Mandatory = $true)]
-    [string[]]$Lines,
+    $Lines,
 
     [Parameter(Mandatory = $true)]
     [string]$Name
   )
 
-  foreach ($line in $Lines) {
+  if ($Lines -is [hashtable]) {
+    if ($Lines.ContainsKey($Name)) {
+      return [string]$Lines[$Name]
+    }
+    return $null
+  }
+
+  foreach ($line in @($Lines)) {
     if ($line -like "$Name=*") {
       return $line.Split('=', 2)[1].Trim('"')
     }
@@ -44,12 +51,12 @@ function Get-EnvValue {
   return $null
 }
 
-$envLines = @()
+$envLines = @{}
 try {
-  $envLines = @(& azd env get-values 2>$null)
+  $envLines = (& azd env get-values --output json 2>$null | ConvertFrom-Json -AsHashtable)
 }
 catch {
-  $envLines = @()
+  $envLines = @{}
 }
 
 if (-not $SubscriptionId) {

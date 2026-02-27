@@ -13,43 +13,35 @@ Deploys a production-style Maester automation solution on Azure with:
 
 After `azd init -t <your-template-id>` and `cd container-app-job`, run one command:
 
-`./scripts/Start-Setup.ps1 -IncludeWebApp -SecurityGroupObjectId <groupObjectId>`
+`azd up`
 
-For quick mode (no web app), run with no mode flags:
+During interactive `azd up`, the preprovision wizard prompts for:
 
-`./scripts/Start-Setup.ps1`
+- Include Web App / Exchange / Teams / Azure / ACR
+- Security group object ID (required when Web App is enabled)
+- Azure RBAC scopes (when Azure is enabled)
+- Optional mail recipient
+
+For non-interactive runs (`azd up --no-prompt`), if `AZURE_RESOURCE_GROUP` is set, `preup` creates it automatically when missing.
 
 ## Advanced options (optional)
 
-You can optionally enable additional data collection/connectivity for Maester by enabling one or more `-Include*` switches during setup.
+You can optionally enable additional data collection/connectivity for Maester by enabling one or more include options in the `azd up` wizard.
 
-- `-IncludeACR`
+- `IncludeACR`
   - Deploys an Azure Container Registry (Basic SKU).
   - Builds a custom container image with all PowerShell modules pre-installed for significantly faster job startup.
   - Grants the Container App Job managed identity the `AcrPull` role.
-- `-IncludeExchange`
+- `IncludeExchange`
   - Ensures the `ExchangeOnlineManagement` module is available at runtime.
   - Grants the Container App Job managed identity the Exchange app permission required for app-only Exchange Online access.
   - Creates/links an Exchange service principal for the managed identity and assigns the Exchange RBAC role `View-Only Configuration` (best-effort).
-- `-IncludeTeams`
+- `IncludeTeams`
   - Ensures the `MicrosoftTeams` module is available at runtime.
   - Assigns the Entra directory role `Teams Reader` to the Container App Job managed identity.
-- `-IncludeAzure`
+- `IncludeAzure`
   - Grants Azure RBAC `Reader` to the Container App Job managed identity at one or more scopes.
   - Scopes can be management groups and/or subscriptions.
-
-Examples:
-
-- Enable ACR for faster startup:
-  - `./scripts/Start-Setup.ps1 -IncludeACR`
-- Enable Exchange + Teams:
-  - `./scripts/Start-Setup.ps1 -IncludeExchange -IncludeTeams`
-- Enable Azure and select scopes interactively:
-  - `./scripts/Start-Setup.ps1 -IncludeAzure`
-- Enable Azure with explicit scopes:
-  - `./scripts/Start-Setup.ps1 -IncludeAzure -AzureScopes '/providers/Microsoft.Management/managementGroups/<mgName>','/subscriptions/<subId>'`
-- Full options:
-  - `./scripts/Start-Setup.ps1 -IncludeWebApp -IncludeACR -IncludeExchange -IncludeTeams -IncludeAzure -SecurityGroupObjectId <groupObjectId>`
 
 ### Permission behavior
 
@@ -57,14 +49,13 @@ Examples:
 - If a step fails due to missing privileges, the scripts will:
   - Prompt you to **Stop** or **Skip** in interactive runs.
   - Default to **Skip + continue** in non-interactive runs (CI).
+- Toggling an option from `Yes` to `No` in a later `azd up` run is additive only and does **not** revoke prior assignments.
+- Revocation/best-effort cleanup runs on `azd down` (predown hook).
 
 What this does:
 
-- signs in with Azure CLI if needed
-- lets you choose a subscription if not provided
-- initializes azd environment values
-- runs `azd provision --no-prompt --no-state`
-- executes pre/post hooks for setup + validation
+- runs preprovision checks/auth + interactive wizard
+- provisions infra and runs postprovision setup + validation hooks
 
 ## Modes
 
@@ -75,18 +66,18 @@ Defaults:
 
 - `PERMISSION_PROFILE=Extended`
 - `WEB_APP_SKU=F1`
-- resource group pattern: `rg-<environment>-<location>` (override with `-ResourceGroupName`)
+- resource group pattern: `rg-<environment>-<location>` (override with `AZURE_RESOURCE_GROUP`)
 
 ## Operations
 
-- Remove environment + Azure resources:
-  `./scripts/Remove-AzdEnvironment.ps1 -EnvironmentName <env>`
-- Remove Azure resources but keep local azd env:
-  `./scripts/Remove-AzdEnvironment.ps1 -EnvironmentName <env> -KeepEnvironment`
+- Remove environment + Azure resources (includes predown cleanup):
+  `azd down -e <env> --force --purge`
+- Optionally remove local azd env:
+  `azd env remove <env> --force`
 
 ### Cleanup details
 
-`Remove-AzdEnvironment.ps1` performs best-effort cleanup for tenant/scope-level assignments created by advanced options before running `azd down`, including:
+`azd down` runs `scripts/Run-AzdPreDown.ps1`, which performs best-effort cleanup for tenant/scope-level assignments created by advanced options, including:
 
 - Teams directory role assignments (`Teams Reader`) created by this environment
 - Azure RBAC role assignments created by this environment (at selected scopes)
@@ -124,13 +115,10 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 
 ## Script map
 
-- User entry point: `scripts/Start-Setup.ps1`
-- Environment setup: `scripts/Initialize-AzdEnvironment.ps1`
-- azd hooks: `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`
+- azd hooks: `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
 - Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-JobValidation.ps1`
 - Container runner script (uploaded to Azure Files): `scripts/Invoke-MaesterContainerJob.ps1`
 - ACR image build: `scripts/Build-MaesterImage.ps1`, `Dockerfile`
-- Teardown: `scripts/Remove-AzdEnvironment.ps1`
 
 ## Runtime behavior
 

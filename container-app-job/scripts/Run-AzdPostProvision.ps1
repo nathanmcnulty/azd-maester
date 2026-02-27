@@ -29,13 +29,20 @@ $ErrorActionPreference = 'Stop'
 function Get-EnvValue {
   param(
     [Parameter(Mandatory = $true)]
-    [string[]]$Lines,
+    $Lines,
 
     [Parameter(Mandatory = $true)]
     [string]$Name
   )
 
-  foreach ($line in $Lines) {
+  if ($Lines -is [hashtable]) {
+    if ($Lines.ContainsKey($Name)) {
+      return [string]$Lines[$Name]
+    }
+    return $null
+  }
+
+  foreach ($line in @($Lines)) {
     if ($line -like "$Name=*") {
       return $line.Split('=', 2)[1].Trim('"')
     }
@@ -108,8 +115,15 @@ $exoAppRoleAssignmentIdsFromEnv = 'n/a'
 $teamsRoleAssignmentIdsFromEnv = 'n/a'
 $azureRoleAssignmentIdsFromEnv = 'n/a'
 $exoServicePrincipalDisplayNameFromEnv = 'n/a'
-$envValues = & azd env get-values
-if ($LASTEXITCODE -eq 0) {
+$envValues = @{}
+try {
+  $envValues = (& azd env get-values --output json 2>$null | ConvertFrom-Json -AsHashtable)
+}
+catch {
+  $envValues = @{}
+}
+
+if ($envValues.Count -gt 0) {
   $easyAuthAppObjectIdValue = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID'
   $easyAuthAppClientIdValue = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_CLIENT_ID'
   $easyAuthAppDisplayNameValue = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_DISPLAY_NAME'

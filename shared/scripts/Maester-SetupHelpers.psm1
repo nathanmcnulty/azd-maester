@@ -1,5 +1,5 @@
 # Shared setup helper functions for azd-maester solutions
-# Imported by Setup-PostDeploy.ps1 and Start-Setup.ps1 in each solution.
+# Imported by azd hook scripts and Setup-PostDeploy.ps1 in each solution.
 
 # ── Utilities ────────────────────────────────────────────────────────────────
 

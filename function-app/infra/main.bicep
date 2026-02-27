@@ -1,6 +1,12 @@
 ﻿targetScope = 'resourceGroup'
 
 @description('Deployment location')
+@metadata({
+  azd: {
+    type: 'location'
+    default: 'eastus2'
+  }
+})
 param location string = resourceGroup().location
 
 @description('Environment name from azd')
@@ -13,15 +19,51 @@ param userAssignedIdentityResourceId string = ''
 param mailRecipient string = ''
 
 @description('Deploy optional Web App hosting component')
+@allowed([
+  'true'
+  'false'
+])
+@metadata({
+  azd: {
+    default: 'false'
+  }
+})
 param includeWebAppOption string = 'false'
 
 @description('Enable Exchange Online connectivity and permissions for Maester')
+@allowed([
+  'true'
+  'false'
+])
+@metadata({
+  azd: {
+    default: 'false'
+  }
+})
 param includeExchangeOption string = 'false'
 
 @description('Enable Microsoft Teams connectivity and permissions for Maester')
+@allowed([
+  'true'
+  'false'
+])
+@metadata({
+  azd: {
+    default: 'false'
+  }
+})
 param includeTeamsOption string = 'false'
 
 @description('Enable Azure RBAC role assignments for Maester')
+@allowed([
+  'true'
+  'false'
+])
+@metadata({
+  azd: {
+    default: 'false'
+  }
+})
 param includeAzureOption string = 'false'
 
 @description('Optional Web App SKU for hosting report access portal')
@@ -32,6 +74,11 @@ param enableResourceLocks bool = true
 
 @description('Function App hosting plan SKU: FC1 (Flex Consumption), B1 (App Service Basic), Y1 (Consumption)')
 @allowed(['FC1', 'B1', 'Y1'])
+@metadata({
+  azd: {
+    default: 'FC1'
+  }
+})
 param functionAppPlan string = 'FC1'
 
 @description('Optional custom tags merged onto top-level resources')
@@ -50,8 +97,6 @@ var resourceSuffix = toLower(uniqueString(resourceGroup().id, environmentName))
 var storageAccountName = 'stmaester${resourceSuffix}'
 var hostingPlanName = 'plan-${toLower(environmentName)}'
 var functionAppName = 'func-maester-${substring(resourceSuffix, 0, 12)}'
-var logAnalyticsName = 'log-maester-${substring(resourceSuffix, 0, 12)}'
-var appInsightsName = 'appi-maester-${substring(resourceSuffix, 0, 12)}'
 var storageBlobDataContributorRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
@@ -160,34 +205,6 @@ resource storageManagementPolicy 'Microsoft.Storage/storageAccounts/managementPo
 }
 
 // ──────────────────────────────────────────────
-// Application Insights + Log Analytics
-// ──────────────────────────────────────────────
-
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: logAnalyticsName
-  location: location
-  tags: resourceTags
-  properties: {
-    sku: {
-      name: 'PerGB2018'
-    }
-    retentionInDays: 30
-  }
-}
-
-resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
-  name: appInsightsName
-  location: location
-  tags: resourceTags
-  kind: 'web'
-  properties: {
-    Application_Type: 'web'
-    WorkspaceResourceId: logAnalyticsWorkspace.id
-    RetentionInDays: 30
-  }
-}
-
-// ──────────────────────────────────────────────
 // Function App (Linux, PowerShell 7.4)
 // Plan varies by functionAppPlan parameter:
 //   Y1 = Consumption (Dynamic, 10-min timeout max)
@@ -241,14 +258,6 @@ var functionAppBaseAppSettings = union(functionAppFlexOnlySettings, [
   {
     name: 'AzureWebJobsStorage'
     value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
-  }
-  {
-    name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-    value: appInsights.properties.ConnectionString
-  }
-  {
-    name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
-    value: appInsights.properties.InstrumentationKey
   }
   {
     name: 'STORAGE_ACCOUNT_NAME'
