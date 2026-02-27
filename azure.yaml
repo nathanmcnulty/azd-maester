@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: maester-root
+metadata:
+  template: maester-root@0.0.1
+infra:
+  provider: bicep
+  path: infra
+workflows:
+  up:
+    - azd: provision
+hooks:
+  preup:
+    shell: pwsh
+    run: ./scripts/Run-AzdRootGuard.ps1
+  preprovision:
+    shell: pwsh
+    run: ./scripts/Run-AzdRootGuard.ps1

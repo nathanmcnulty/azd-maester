@@ -30,6 +30,8 @@ After `azd init -t <your-template-id>`, choose a folder:
   - `cd azure-devops`
   - `azd up`
 
+If you accidentally run `azd up` from the repository root, a guard script now prints these same folder-specific commands and exits before provisioning.
+
 `azd up` runs a full interactive preprovision wizard for include flags and required values (for example security group and Azure DevOps org/project).
 
 Non-interactive note (`--no-prompt`): if `AZURE_RESOURCE_GROUP` is set, `preup` creates it automatically when missing.

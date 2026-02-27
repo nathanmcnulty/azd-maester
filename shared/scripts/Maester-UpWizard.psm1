@@ -42,7 +42,6 @@ function Set-AzdEnvValueStrict {
 
 function Test-InteractiveWizard {
   if ($env:AZD_NON_INTERACTIVE -eq 'true' -or
-      $env:AZD_NO_PROMPT -eq 'true' -or
       $env:CI -eq 'true') {
     return $false
   }
@@ -55,7 +54,8 @@ function Test-InteractiveWizard {
   }
 
   try {
-    if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
+    # azd can capture hook output in interactive runs; stdin redirection is the reliable signal.
+    if ([Console]::IsInputRedirected) {
       return $false
     }
   }
