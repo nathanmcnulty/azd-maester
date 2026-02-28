@@ -81,6 +81,9 @@ param customTags object = {}
 @description('Deployment timestamp used to compute a future schedule start time')
 param deploymentTimestamp string = utcNow()
 
+@description('Stable GUID for the Automation Account jobSchedule. Managed by preprovision to avoid Azure Automation ghost-state conflicts after resource group deletion.')
+param jobScheduleId string = newGuid()
+
 // Standardized parameters and tags for consistency with function-app and container-app-job
 var automationAccountName = 'aa-${toLower(environmentName)}'
 var scheduleName = 'maester-weekly-sunday'
@@ -538,7 +541,7 @@ resource schedule 'Microsoft.Automation/automationAccounts/schedules@2023-11-01'
 }
 
 resource jobSchedule 'Microsoft.Automation/automationAccounts/jobSchedules@2023-11-01' = {
-  name: guid(automationAccount.id, scheduleName, runbookName)
+  name: jobScheduleId
   parent: automationAccount
   properties: {
     schedule: {

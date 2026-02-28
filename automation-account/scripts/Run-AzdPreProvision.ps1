@@ -29,36 +29,70 @@ if ([string]::IsNullOrWhiteSpace($location)) {
   $location = Get-AzdEnvironmentValue -Values $postWizardEnvValues -Name 'AZURE_LOCATION'
 }
 
-# Remove any existing jobSchedules to allow idempotent re-deployment after partial failures
+# Manage jobSchedule GUID for idempotent deployment.
+# Azure Automation caches jobSchedule GUIDs at service level beyond ARM resource lifecycle —
+# the same GUID cannot be reused after the resource group is deleted (ghost state).
+# If the AA exists: remove lock, delete live jobSchedules, reuse stored GUID.
+# If the AA is gone: generate a fresh GUID to avoid ghost-state conflicts.
+$storedGuid = $env:AUTOMATION_JOB_SCHEDULE_ID
 $aaName = $env:automationAccountName
 $rgName = $env:AZURE_RESOURCE_GROUP
-if (-not [string]::IsNullOrWhiteSpace($aaName) -and -not [string]::IsNullOrWhiteSpace($rgName) -and -not [string]::IsNullOrWhiteSpace($SubscriptionId)) {
-  try {
-    $jobSchedulesJson = az automation job-schedule list `
-      --automation-account-name $aaName `
-      --resource-group $rgName `
-      --subscription $SubscriptionId `
-      -o json 2>$null
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($jobSchedulesJson)) {
-      $jobSchedules = @($jobSchedulesJson | ConvertFrom-Json)
-      foreach ($js in $jobSchedules) {
+
+# Default to a fresh GUID; refined below if the AA exists and we can reuse the stored one.
+$jobScheduleId = [System.Guid]::NewGuid().ToString()
+
+try {
+  $aaExists = $false
+  if (-not [string]::IsNullOrWhiteSpace($aaName) -and -not [string]::IsNullOrWhiteSpace($rgName) -and -not [string]::IsNullOrWhiteSpace($SubscriptionId)) {
+    $aaJson = az automation account show --name $aaName --resource-group $rgName --subscription $SubscriptionId -o json 2>$null
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($aaJson)) {
+      $aaExists = $true
+    }
+  }
+
+  if ($aaExists) {
+    Write-Host 'Automation Account exists. Removing resource lock and cleaning up live jobSchedules for re-deployment...'
+
+    # Remove CanNotDelete lock so jobSchedules can be deleted (bicep will re-create it)
+    $lockId = "/subscriptions/$SubscriptionId/resourceGroups/$rgName/providers/Microsoft.Automation/automationAccounts/$aaName/providers/Microsoft.Authorization/locks/lock-cannot-delete-automation"
+    az lock delete --ids $lockId --subscription $SubscriptionId 2>&1 | Out-Null
+
+    # List and delete all live jobSchedules via REST API
+    # (az automation job-schedule CLI subcommand does not exist)
+    $listUri = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$rgName/providers/Microsoft.Automation/automationAccounts/$aaName/jobSchedules?api-version=2023-11-01"
+    $listJson = az rest --method GET --uri $listUri -o json 2>$null
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($listJson)) {
+      $liveSchedules = @(($listJson | ConvertFrom-Json).value)
+      foreach ($js in $liveSchedules) {
         $jsId = $js.name
         if (-not [string]::IsNullOrWhiteSpace($jsId)) {
-          Write-Host "  Removing existing jobSchedule '$jsId' to allow idempotent re-deployment..."
-          az automation job-schedule delete `
-            --automation-account-name $aaName `
-            --resource-group $rgName `
-            --subscription $SubscriptionId `
-            --job-schedule-id $jsId `
-            --yes 2>&1 | Out-Null
+          Write-Host "  Deleting live jobSchedule '$jsId'..."
+          $deleteUri = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$rgName/providers/Microsoft.Automation/automationAccounts/$aaName/jobSchedules/${jsId}?api-version=2023-11-01"
+          az rest --method DELETE --uri $deleteUri 2>&1 | Out-Null
         }
       }
     }
+
+    # Reuse the stored GUID — it was live and just cleaned up, safe to redeploy with same ID
+    if (-not [string]::IsNullOrWhiteSpace($storedGuid)) {
+      $jobScheduleId = $storedGuid
+      Write-Host "  Reusing stored jobSchedule GUID: $jobScheduleId"
+    }
+    else {
+      Write-Host "  Generated new jobSchedule GUID: $jobScheduleId"
+    }
   }
-  catch {
-    Write-Warning "Could not clean up existing jobSchedules: $_"
+  else {
+    # AA does not exist — fresh GUID avoids ghost-state conflicts in Azure Automation service
+    Write-Host "Automation Account not found. Generated fresh jobSchedule GUID: $jobScheduleId"
   }
 }
+catch {
+  Write-Warning "Could not manage jobSchedule state: $_"
+  Write-Host "Using fallback jobSchedule GUID: $jobScheduleId"
+}
+
+& azd env set AUTOMATION_JOB_SCHEDULE_ID $jobScheduleId
 
 # Check Automation Account quota in the target region
 if ($location) {

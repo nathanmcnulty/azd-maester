@@ -25,6 +25,9 @@
     },
     "webAppSkuName": {
       "value": "${WEB_APP_SKU}"
+    },
+    "jobScheduleId": {
+      "value": "${AUTOMATION_JOB_SCHEDULE_ID}"
     }
   }
 }
