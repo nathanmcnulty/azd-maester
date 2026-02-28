@@ -204,7 +204,7 @@ function Read-TextChoice {
   }
 }
 
-function Parse-AzureScopes {
+function ConvertFrom-AzureScopes {
   param(
     [Parameter(Mandatory = $false)]
     [string]$Value
@@ -217,7 +217,7 @@ function Parse-AzureScopes {
   return @($Value -split ';' | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 }
 
-function Serialize-AzureScopes {
+function ConvertTo-AzureScopes {
   param(
     [Parameter(Mandatory = $false)]
     [string[]]$Scopes
@@ -251,7 +251,7 @@ function Resolve-AzureScopes {
 
   if (-not $InteractiveWizard) {
     if ($ExistingScopes.Count -gt 0) {
-      return (Serialize-AzureScopes -Scopes $ExistingScopes)
+      return (ConvertTo-AzureScopes -Scopes $ExistingScopes)
     }
 
     return "/subscriptions/$SubscriptionId"
@@ -265,12 +265,12 @@ function Resolve-AzureScopes {
       -InteractiveDefault $true `
       -InteractiveWizard $true
     if ($useExisting) {
-      return (Serialize-AzureScopes -Scopes $ExistingScopes)
+      return (ConvertTo-AzureScopes -Scopes $ExistingScopes)
     }
   }
 
   $selectedScopes = Select-AzureRbacScopes -DefaultSubscriptionId $SubscriptionId -ResourceTypeName $ResourceTypeName
-  return (Serialize-AzureScopes -Scopes $selectedScopes)
+  return (ConvertTo-AzureScopes -Scopes $selectedScopes)
 }
 
 function Get-LocationOrDefault {
@@ -336,7 +336,7 @@ function Invoke-MaesterUpWizard {
     $securityGroupObjectIdCurrent = Get-AzdEnvironmentValue -Values $envValues -Name 'EASY_AUTH_SECURITY_GROUP_OBJECT_ID'
   }
   $securityGroupDisplayNameCurrent = Get-AzdEnvironmentValue -Values $envValues -Name 'SECURITY_GROUP_DISPLAY_NAME'
-  $azureScopesCurrent = @(Parse-AzureScopes -Value (Get-AzdEnvironmentValue -Values $envValues -Name 'AZURE_RBAC_SCOPES'))
+  $azureScopesCurrent = @(ConvertFrom-AzureScopes -Value (Get-AzdEnvironmentValue -Values $envValues -Name 'AZURE_RBAC_SCOPES'))
 
   $includeWebApp = Read-BoolChoice -Prompt 'Include Web App?' -CurrentValue $includeWebAppCurrent -InteractiveDefault $true -InteractiveWizard $interactiveWizard
   $includeExchange = Read-BoolChoice -Prompt 'Include Exchange?' -CurrentValue $includeExchangeCurrent -InteractiveDefault $true -InteractiveWizard $interactiveWizard
