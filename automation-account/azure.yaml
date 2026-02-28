@@ -11,12 +11,16 @@ hooks:
   preup:
     shell: pwsh
     run: ./scripts/Run-AzdPreUp.ps1
+    interactive: true
   preprovision:
     shell: pwsh
     run: ./scripts/Run-AzdPreProvision.ps1
+    interactive: true
   postprovision:
     shell: pwsh
     run: ./scripts/Run-AzdPostProvision.ps1
+    interactive: true
   predown:
     shell: pwsh
     run: ./scripts/Run-AzdPreDown.ps1
+    interactive: true
