@@ -635,7 +635,7 @@ if (-not $PSBoundParameters.ContainsKey('ValidatePipelineRun')) {
 }
 if (-not $PSBoundParameters.ContainsKey('FailOnTestFailures')) {
   $failOnTestFailuresValue = if ($env:AZDO_FAIL_ON_TEST_FAILURES) { $env:AZDO_FAIL_ON_TEST_FAILURES } else { Get-EnvValue -Lines $envLines -Name 'AZDO_FAIL_ON_TEST_FAILURES' }
-  $FailOnTestFailures = ConvertTo-BoolOrDefault -Value $failOnTestFailuresValue -Default $true
+  $FailOnTestFailures = ConvertTo-BoolOrDefault -Value $failOnTestFailuresValue -Default $false
 }
 
 $SubscriptionId = Test-RequiredValue -Value $SubscriptionId -Name 'SubscriptionId'

@@ -194,7 +194,7 @@ function Install-RequiredModule {
     $installParams['RequiredVersion'] = $RequiredVersion
   }
 
-  Install-Module @installParams
+  Install-Module @installParams -WarningAction SilentlyContinue
 }
 
 function Compress-FileToGzip {
@@ -271,7 +271,7 @@ if ($includeTeamsBool) {
   Install-RequiredModule -Name 'MicrosoftTeams' -RequiredVersion $teamsModuleVersion
 }
 
-Import-Module Az.Accounts -Force
+Import-Module Az.Accounts -Force -WarningAction SilentlyContinue
 Import-Module Az.Storage -Force
 if ($includeExchangeBool) {
   Import-Module ExchangeOnlineManagement -RequiredVersion $exchangeOnlineModuleVersion -Force
@@ -283,6 +283,11 @@ Import-Module Microsoft.Graph.Authentication -Force
 Import-Module Maester -Force
 if ($includeWebAppBool) {
   Import-Module Az.Websites -ErrorAction SilentlyContinue
+}
+
+$azCtx = Get-AzContext -ErrorAction SilentlyContinue
+if ($azCtx -and $azCtx.Subscription) {
+  Update-AzConfig -DefaultSubscriptionForLogin $azCtx.Subscription.Id -WarningAction SilentlyContinue | Out-Null
 }
 
 Write-Host 'Acquiring Microsoft Graph token and connecting...'
@@ -491,7 +496,7 @@ $pesterConfiguration.TestResult.OutputPath = $resultsXmlPath
 
 Write-Host 'Running Maester tests...'
 # Pipelines must stay non-interactive; never allow device-code/browser auth prompts.
-Invoke-Maester -Path $testsRoot -PesterConfiguration $pesterConfiguration -OutputFolder $outputFolder -NonInteractive:$true
+Invoke-Maester -Path $testsRoot -PesterConfiguration $pesterConfiguration -OutputFolder $outputFolder -NonInteractive:$true -WarningAction SilentlyContinue
 
 
 $generatedHtml = Get-ChildItem -Path $outputFolder -Filter 'TestResults*.html' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
