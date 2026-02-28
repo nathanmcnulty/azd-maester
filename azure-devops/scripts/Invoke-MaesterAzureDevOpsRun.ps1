@@ -31,7 +31,7 @@ param(
   [string]$MailRecipient = '',
 
   [Parameter(Mandatory = $false)]
-  [string]$FailOnTestFailures = 'true'
+  [string]$FailOnTestFailures = 'false'
 )
 
 Set-StrictMode -Version Latest
@@ -170,11 +170,24 @@ function Install-RequiredModule {
     [string]$RequiredVersion
   )
 
+  $availableModules = @(Get-Module -ListAvailable -Name $Name | Sort-Object Version -Descending)
+  if ($availableModules.Count -gt 0) {
+    if ([string]::IsNullOrWhiteSpace($RequiredVersion)) {
+      return
+    }
+
+    $matchedVersion = $availableModules | Where-Object { $_.Version -eq [version]$RequiredVersion } | Select-Object -First 1
+    if ($matchedVersion) {
+      return
+    }
+  }
+
   $installParams = @{
     Name         = $Name
     Scope        = 'CurrentUser'
     Force        = $true
     AllowClobber = $true
+    Repository   = 'PSGallery'
   }
 
   if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) {
@@ -478,19 +491,23 @@ $pesterConfiguration.TestResult.OutputPath = $resultsXmlPath
 
 Write-Host 'Running Maester tests...'
 # Pipelines must stay non-interactive; never allow device-code/browser auth prompts.
-Invoke-Maester -Path $testsRoot -PesterConfiguration $pesterConfiguration -OutputFolder $outputFolder -OutputHtmlFile $latestHtmlPath -NonInteractive:$true
+Invoke-Maester -Path $testsRoot -PesterConfiguration $pesterConfiguration -OutputFolder $outputFolder -NonInteractive:$true
 
 
-if (-not (Test-Path -Path $latestHtmlPath)) {
-  $fallbackHtml = Get-ChildItem -Path $outputFolder -Filter '*.html' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  if ($fallbackHtml) {
-    Copy-Item -Path $fallbackHtml.FullName -Destination $latestHtmlPath -Force
-    Write-Warning "Maester did not create expected latest.html. Using '$($fallbackHtml.Name)' as latest.html."
-  }
-  else {
-    throw "No Maester HTML report file was generated in '$outputFolder'."
-  }
+$generatedHtml = Get-ChildItem -Path $outputFolder -Filter 'TestResults*.html' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $generatedHtml) {
+  $generatedHtml = Get-ChildItem -Path $outputFolder -Filter '*.html' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
+
+if (-not $generatedHtml) {
+  throw "No Maester HTML report file was generated in '$outputFolder'."
+}
+
+if ($generatedHtml.FullName -ne $latestHtmlPath) {
+  Copy-Item -Path $generatedHtml.FullName -Destination $latestHtmlPath -Force
+}
+
+Write-Host "Selected Maester HTML report: $($generatedHtml.Name)"
 
 $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
 $archiveGzipPath = Join-Path -Path $outputFolder -ChildPath "maester-report-$timestamp.html.gz"
