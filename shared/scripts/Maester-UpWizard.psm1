@@ -373,7 +373,7 @@ function Invoke-MaesterUpWizard {
   $securityGroupDisplayNameCurrent = Get-AzdEnvironmentValue -Values $envValues -Name 'SECURITY_GROUP_DISPLAY_NAME'
   $azureScopesCurrent = @(ConvertFrom-AzureScopes -Value (Get-AzdEnvironmentValue -Values $envValues -Name 'AZURE_RBAC_SCOPES'))
 
-  $includeWebApp = Read-BoolChoice -Prompt 'Include Web App?' -CurrentValue $includeWebAppCurrent -InteractiveDefault $true -InteractiveWizard $interactiveWizard
+  $includeWebApp = Read-BoolChoice -Prompt 'Include Web App?' -CurrentValue $includeWebAppCurrent -InteractiveDefault $false -InteractiveWizard $interactiveWizard
   $includeExchange = Read-BoolChoice -Prompt 'Include Exchange?' -CurrentValue $includeExchangeCurrent -InteractiveDefault $true -InteractiveWizard $interactiveWizard
   $includeTeams = Read-BoolChoice -Prompt 'Include Teams?' -CurrentValue $includeTeamsCurrent -InteractiveDefault $true -InteractiveWizard $interactiveWizard
   $includeAzure = Read-BoolChoice -Prompt 'Include Azure?' -CurrentValue $includeAzureCurrent -InteractiveDefault $true -InteractiveWizard $interactiveWizard
