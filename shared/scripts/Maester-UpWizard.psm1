@@ -410,6 +410,11 @@ function Invoke-MaesterUpWizard {
     -ExistingScopes $azureScopesCurrent `
     -ResourceTypeName $SolutionName
 
+  $currentAzureLocation = Get-AzdEnvironmentValue -Values $envValues -Name 'AZURE_LOCATION'
+  if ([string]::IsNullOrWhiteSpace($currentAzureLocation)) {
+    Set-AzdEnvValueStrict -Name 'AZURE_LOCATION' -Value $effectiveLocation
+  }
+
   Set-AzdEnvValueStrict -Name 'AZURE_RESOURCE_GROUP' -Value $resourceGroupDefault
   Set-AzdEnvValueStrict -Name 'INCLUDE_WEB_APP' -Value $includeWebApp.ToString().ToLower()
   Set-AzdEnvValueStrict -Name 'INCLUDE_EXCHANGE' -Value $includeExchange.ToString().ToLower()

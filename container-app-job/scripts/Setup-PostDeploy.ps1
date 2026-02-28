@@ -181,24 +181,13 @@ $storageBlobDataReaderRoleId = "/subscriptions/$SubscriptionId/providers/Microso
 
 $signedInUser = $null
 try {
-  Connect-MgGraphSilent -TenantId $TenantId -Scopes 'User.Read','Directory.Read.All'
-  $signedInUser = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,displayName'
+  $signedInUserJson = az ad signed-in-user show --query "{id:id,userPrincipalName:userPrincipalName,displayName:displayName}" -o json 2>$null
+  if ($LASTEXITCODE -eq 0 -and $signedInUserJson) {
+    $signedInUser = $signedInUserJson | ConvertFrom-Json
+  }
 }
 catch {
-  Write-Warning ("Could not resolve signed-in Entra user from Microsoft Graph for Storage Blob Data Reader assignment. Error: {0}" -f $_.Exception.Message)
-}
-
-if (-not $signedInUser -or -not $signedInUser.id) {
-  try {
-    $signedInUserJson = az ad signed-in-user show --query "{id:id,userPrincipalName:userPrincipalName,displayName:displayName}" -o json 2>$null
-    if ($LASTEXITCODE -eq 0 -and $signedInUserJson) {
-      $signedInUser = $signedInUserJson | ConvertFrom-Json
-      Write-Host 'Resolved signed-in user via Azure CLI fallback.'
-    }
-  }
-  catch {
-    Write-Warning ("Could not resolve signed-in Entra user from Azure CLI fallback. Error: {0}" -f $_.Exception.Message)
-  }
+  Write-Warning ("Could not resolve signed-in user from Azure CLI for Storage Blob Data Reader assignment. Error: {0}" -f $_.Exception.Message)
 }
 
 if ($signedInUser -and $signedInUser.id) {

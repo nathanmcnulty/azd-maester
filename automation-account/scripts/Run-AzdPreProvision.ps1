@@ -23,6 +23,43 @@ if (-not $SubscriptionId) {
   $SubscriptionId = $env:AZURE_SUBSCRIPTION_ID
 }
 
+# Re-read location from azd env in case the wizard set it during preprovision
+if ([string]::IsNullOrWhiteSpace($location)) {
+  $postWizardEnvValues = Get-AzdEnvironmentValues
+  $location = Get-AzdEnvironmentValue -Values $postWizardEnvValues -Name 'AZURE_LOCATION'
+}
+
+# Remove any existing jobSchedules to allow idempotent re-deployment after partial failures
+$aaName = $env:automationAccountName
+$rgName = $env:AZURE_RESOURCE_GROUP
+if (-not [string]::IsNullOrWhiteSpace($aaName) -and -not [string]::IsNullOrWhiteSpace($rgName) -and -not [string]::IsNullOrWhiteSpace($SubscriptionId)) {
+  try {
+    $jobSchedulesJson = az automation job-schedule list `
+      --automation-account-name $aaName `
+      --resource-group $rgName `
+      --subscription $SubscriptionId `
+      -o json 2>$null
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($jobSchedulesJson)) {
+      $jobSchedules = @($jobSchedulesJson | ConvertFrom-Json)
+      foreach ($js in $jobSchedules) {
+        $jsId = $js.name
+        if (-not [string]::IsNullOrWhiteSpace($jsId)) {
+          Write-Host "  Removing existing jobSchedule '$jsId' to allow idempotent re-deployment..."
+          az automation job-schedule delete `
+            --automation-account-name $aaName `
+            --resource-group $rgName `
+            --subscription $SubscriptionId `
+            --job-schedule-id $jsId `
+            --yes 2>&1 | Out-Null
+        }
+      }
+    }
+  }
+  catch {
+    Write-Warning "Could not clean up existing jobSchedules: $_"
+  }
+}
+
 # Check Automation Account quota in the target region
 if ($location) {
   Write-Host "Checking Automation Account quota in region '$location'..."

@@ -30,7 +30,7 @@ function Remove-ResourceGroupLocks {
     $lockIds = @($locksPayload.value | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     foreach ($lockId in $lockIds) {
       Write-Host "  Removing lock: $($lockId.Split('/')[-1])"
-      & az lock delete --ids $lockId | Out-Null
+      & az lock delete --ids $lockId --subscription $SubscriptionId | Out-Null
       if ($LASTEXITCODE -ne 0) {
         Write-Warning "Failed to remove lock: $lockId"
       }

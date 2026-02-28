@@ -921,6 +921,54 @@ if (-not $storageResource) {
 }
 $webAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' } | Select-Object -First 1
 
+# ──────────────────────────────────────────────
+# Storage Blob Data Reader for signed-in user
+# ──────────────────────────────────────────────
+
+$storageBlobDataReaderRoleId = "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"
+
+$signedInUser = $null
+try {
+  $signedInUserJson = az ad signed-in-user show --query "{id:id,userPrincipalName:userPrincipalName,displayName:displayName}" -o json 2>$null
+  if ($LASTEXITCODE -eq 0 -and $signedInUserJson) {
+    $signedInUser = $signedInUserJson | ConvertFrom-Json
+  }
+}
+catch {
+  Write-Warning ("Could not resolve signed-in user from Azure CLI for Storage Blob Data Reader assignment. Error: {0}" -f $_.Exception.Message)
+}
+
+if ($signedInUser -and $signedInUser.id) {
+  $existingReaderAssignmentsPath = "$($storageResource.id)/providers/Microsoft.Authorization/roleAssignments?`$filter=atScope()&api-version=2022-04-01"
+  $existingReaderAssignmentsResponse = Invoke-AzRestMethod -Method GET -Path $existingReaderAssignmentsPath
+  $existingReaderAssignments = ($existingReaderAssignmentsResponse.Content | ConvertFrom-Json).value
+  $existingReaderAssignment = @($existingReaderAssignments | Where-Object {
+      $_.properties.principalId -eq $signedInUser.id -and $_.properties.roleDefinitionId -eq $storageBlobDataReaderRoleId
+    }) | Select-Object -First 1
+
+  $userLabel = if ($signedInUser.userPrincipalName) { $signedInUser.userPrincipalName } else { $signedInUser.id }
+  if (-not $existingReaderAssignment) {
+    $readerAssignmentName = [guid]::NewGuid().ToString()
+    $readerAssignmentPath = "$($storageResource.id)/providers/Microsoft.Authorization/roleAssignments/${readerAssignmentName}?api-version=2022-04-01"
+    $readerAssignmentBody = @{
+      properties = @{
+        roleDefinitionId = $storageBlobDataReaderRoleId
+        principalId      = $signedInUser.id
+        principalType    = 'User'
+      }
+    } | ConvertTo-Json -Depth 10
+
+    Invoke-AzRestMethod -Method PUT -Path $readerAssignmentPath -Payload $readerAssignmentBody | Out-Null
+    Write-Host "Granted Storage Blob Data Reader on '$($storageResource.name)' to signed-in user '$userLabel'."
+  }
+  else {
+    Write-Host "Storage Blob Data Reader on '$($storageResource.name)' is already assigned to '$userLabel'."
+  }
+}
+else {
+  Write-Warning 'Signed-in user object id was not available. Storage Blob Data Reader assignment for user was skipped.'
+}
+
 $baseRoleAssignmentIds = @()
 
 $resourceGroupScope = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName"
