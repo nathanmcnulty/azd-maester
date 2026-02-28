@@ -178,6 +178,27 @@ function Read-TextChoice {
     throw "$Prompt is required for non-interactive runs."
   }
 
+  $stdinRedirected = $false
+  try {
+    $stdinRedirected = [Console]::IsInputRedirected
+  }
+  catch {
+    $stdinRedirected = $false
+  }
+
+  if ($stdinRedirected) {
+    if (-not [string]::IsNullOrWhiteSpace($defaultValue)) {
+      return $defaultValue
+    }
+
+    if ($AllowEmpty) {
+      return ''
+    }
+
+    throw "$Prompt is required for non-interactive runs."
+  }
+
+  $emptyAttempts = 0
   while ($true) {
     $renderedPrompt = if (-not [string]::IsNullOrWhiteSpace($defaultValue)) {
       "$Prompt [$defaultValue]"
@@ -196,10 +217,16 @@ function Read-TextChoice {
         return ''
       }
 
+      $emptyAttempts++
+      if ($emptyAttempts -ge 5) {
+        throw "$Prompt is required. Unable to read interactive input. Set it with 'azd env set' and retry."
+      }
+
       Write-Host 'A value is required.'
       continue
     }
 
+    $emptyAttempts = 0
     return $inputValue.Trim()
   }
 }
