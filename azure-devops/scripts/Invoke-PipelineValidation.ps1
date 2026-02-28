@@ -160,10 +160,8 @@ if ([string]::IsNullOrWhiteSpace($runState)) {
   $runState = 'unknown'
 }
 $runResult = [string](Get-OptionalPropertyValue -InputObject $run -PropertyName 'result')
-if ([string]::IsNullOrWhiteSpace($runResult)) {
-  $runResult = 'unknown'
-}
 $runUrl = $null
+$lastStatusMessage = $null
 
 $runDetailsUri = "https://dev.azure.com/$AdoOrganization/$AdoProject/_apis/pipelines/$pipelineId/runs/$($runId)?api-version=7.1-preview.1"
 while ((Get-Date) -lt $deadline) {
@@ -185,7 +183,17 @@ while ((Get-Date) -lt $deadline) {
     $runUrl = $href
   }
 
-  Write-Host "Pipeline run status: state=$runState result=$runResult"
+  $statusMessage = if (-not [string]::IsNullOrWhiteSpace($runResult) -and $runResult -ne 'unknown') {
+    "Pipeline run status: state=$runState result=$runResult"
+  }
+  else {
+    "Pipeline run status: state=$runState"
+  }
+
+  if ($statusMessage -ne $lastStatusMessage) {
+    Write-Host $statusMessage
+    $lastStatusMessage = $statusMessage
+  }
 
   if ($runState -eq 'completed') {
     break
@@ -196,6 +204,10 @@ while ((Get-Date) -lt $deadline) {
 
 if ($runState -ne 'completed') {
   throw "Pipeline run '$runId' did not complete within $TimeoutMinutes minutes. Last state: $runState"
+}
+
+if ([string]::IsNullOrWhiteSpace($runResult)) {
+  $runResult = 'unknown'
 }
 
 $validationPassed = $false

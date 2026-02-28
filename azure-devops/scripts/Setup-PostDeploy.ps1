@@ -476,7 +476,33 @@ function Push-RepositoryFiles {
   }
   finally {
     if (Test-Path -Path $tempPath) {
-      Remove-Item -Path $tempPath -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-DirectoryQuiet -Path $tempPath
+    }
+  }
+}
+
+function Remove-DirectoryQuiet {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) {
+    return
+  }
+
+  try {
+    [System.IO.Directory]::Delete($Path, $true)
+    return
+  }
+  catch {
+    $previousProgressPreference = $ProgressPreference
+    try {
+      $ProgressPreference = 'SilentlyContinue'
+      Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    finally {
+      $ProgressPreference = $previousProgressPreference
     }
   }
 }
@@ -1437,7 +1463,7 @@ if ($PushPipelineFiles) {
 
     $manualFilesPath = Join-Path -Path $projectRoot -ChildPath ("outputs/{0}-pipeline-files" -f $EnvironmentName)
     if (Test-Path -Path $manualFilesPath) {
-      Remove-Item -Path $manualFilesPath -Recurse -Force
+      Remove-DirectoryQuiet -Path $manualFilesPath
     }
     New-Item -Path $manualFilesPath -ItemType Directory -Force | Out-Null
 
