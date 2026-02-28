@@ -54,6 +54,14 @@ function Test-InteractiveWizard {
     return $false
   }
 
+  try {
+    if ([Console]::IsInputRedirected) {
+      return $false
+    }
+  }
+  catch {
+  }
+
   return $true
 }
 
@@ -439,6 +447,16 @@ function Invoke-MaesterUpWizard {
     'azure-devops' {
       $organizationCurrent = Get-AzdEnvironmentValue -Values $envValues -Name 'AZDO_ORGANIZATION'
       $projectCurrent = Get-AzdEnvironmentValue -Values $envValues -Name 'AZDO_PROJECT'
+
+      if (-not $interactiveWizard) {
+        if ([string]::IsNullOrWhiteSpace($organizationCurrent)) {
+          throw "AZDO_ORGANIZATION is required for non-interactive runs. Set it with: azd env set AZDO_ORGANIZATION dev.azure.com/<org>"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($projectCurrent)) {
+          throw "AZDO_PROJECT is required for non-interactive runs. Set it with: azd env set AZDO_PROJECT <project>"
+        }
+      }
 
       $organization = Read-TextChoice `
         -Prompt 'Azure DevOps organization (dev.azure.com/<org>)' `
