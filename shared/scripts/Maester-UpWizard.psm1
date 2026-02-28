@@ -42,7 +42,8 @@ function Set-AzdEnvValueStrict {
 
 function Test-InteractiveWizard {
   if ($env:AZD_NON_INTERACTIVE -eq 'true' -or
-      $env:CI -eq 'true') {
+      $env:CI -eq 'true' -or
+      (Test-AzdNoPromptInvocation)) {
     return $false
   }
 
@@ -53,16 +54,39 @@ function Test-InteractiveWizard {
     return $false
   }
 
+  return $true
+}
+
+function Test-AzdNoPromptInvocation {
   try {
-    # azd can capture hook output in interactive runs; stdin redirection is the reliable signal.
-    if ([Console]::IsInputRedirected) {
-      return $false
+    $currentPid = $PID
+    for ($depth = 0; $depth -lt 10; $depth++) {
+      $process = Get-CimInstance Win32_Process -Filter "ProcessId = $currentPid" -ErrorAction Stop
+      if (-not $process) {
+        break
+      }
+
+      $name = [string]$process.Name
+      $commandLine = [string]$process.CommandLine
+
+      if ($name -ieq 'azd.exe' -and
+          -not [string]::IsNullOrWhiteSpace($commandLine) -and
+          $commandLine -match '(^|\s)--no-prompt(\s|$)') {
+        return $true
+      }
+
+      $parentPid = [int]$process.ParentProcessId
+      if ($parentPid -le 0 -or $parentPid -eq $currentPid) {
+        break
+      }
+
+      $currentPid = $parentPid
     }
   }
   catch {
   }
 
-  return $true
+  return $false
 }
 
 function Read-BoolChoice {
