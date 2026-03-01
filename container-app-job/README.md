@@ -115,7 +115,7 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 
 ## Script map
 
-- azd hooks: `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
+- azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
 - Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-JobValidation.ps1`
 - Container runner script (uploaded to Azure Files): `scripts/Invoke-MaesterContainerJob.ps1`
 - ACR image build: `scripts/Build-MaesterImage.ps1`, `Dockerfile`

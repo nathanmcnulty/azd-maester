@@ -2,9 +2,8 @@
 
 Deploys a production-style Maester automation solution on Azure with:
 
-- Azure Function App (PowerShell 7.4, Consumption plan, timer-triggered)
+- Azure Function App (PowerShell 7.4, Flex Consumption FC1 by default, timer-triggered)
 - Managed identity + Graph permissions
-- Managed dependencies for automatic module installation
 - Storage-backed report history (`archive`) and latest pointer (`latest/latest.html`)
 - Optional App Service + Easy Auth portal in WebApp mode
 
@@ -84,13 +83,11 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ Azure Functions (Consumption Plan Y1)                            │
+│ Azure Functions (Flex Consumption FC1 by default)                │
 │   ┌────────────────────────────────────────────────────────┐     │
 │   │ Function App (PowerShell 7.4, Linux)                   │     │
 │   │ Timer trigger: Sunday midnight UTC                     │     │
-│   │ Managed dependencies (modules auto-installed)          │     │
 │   │ MI: System-Assigned                                    │     │
-│   │ Timeout: 10 minutes                                    │     │
 │   └──────┬─────────────────────────────────────────────────┘     │
 │          │                                                       │
 └──────────┼───────────────────────────────────────────────────────┘
@@ -107,15 +104,15 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 
 ## Script map
 
-- azd hooks: `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
+- azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
 - Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-FunctionValidation.ps1`
 - Function deployment: `scripts/Deploy-FunctionCode.ps1`
 
 ## Runtime behavior
 
 - Weekly schedule (Sunday midnight UTC). To run at a different time or frequency, edit the `schedule` value in `src/MaesterTimerTrigger/function.json` (e.g. `"0 30 6 * * 1"` for Monday 6:30 UTC), then re-deploy the function code.
-- Consumption plan (Y1): pay-per-execution, auto-scale, 10-minute max timeout
-- Managed dependencies: modules defined in `requirements.psd1` are auto-installed by the platform
+- Default plan: FC1 (Flex Consumption) — serverless, pay-per-execution, 30-minute timeout. Alternatively set `FUNCTION_APP_PLAN` to `Y1` (Consumption, 10-minute max) or `B1` (App Service Basic, no timeout limit)
+- FC1 does not use managed dependencies; modules are bundled into the deployment zip by `scripts/Deploy-FunctionCode.ps1`. Y1/B1 use `requirements.psd1` for auto-installation.
 - Runner script: `src/MaesterTimerTrigger/run.ps1`
 - Outputs:
   - `archive/maester-report-<timestamp>.html.gz`

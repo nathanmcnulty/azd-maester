@@ -231,29 +231,6 @@ function Invoke-MaesterStandardPreDownCleanup {
   Remove-ResourceGroupLocks -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName
 }
 
-function ConvertTo-PlainTextToken {
-  param(
-    [Parameter(Mandatory = $true)]
-    $TokenValue
-  )
-
-  if ($TokenValue -is [string]) {
-    return $TokenValue
-  }
-
-  if ($TokenValue -is [System.Security.SecureString]) {
-    $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($TokenValue)
-    try {
-      return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
-    }
-    finally {
-      [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
-    }
-  }
-
-  return [string]$TokenValue
-}
-
 function Invoke-AdoRest {
   param(
     [Parameter(Mandatory = $true)]

@@ -73,14 +73,13 @@ For non-interactive runs (`azd up --no-prompt`), if `AZURE_RESOURCE_GROUP` is se
 
 ## Script map
 
-- azd hooks: `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
+- azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
 - Core provisioning: `scripts/Setup-PostDeploy.ps1`
 - Pipeline runtime script (committed to Azure Repos): `scripts/Invoke-MaesterAzureDevOpsRun.ps1`
 - Pipeline validation: `scripts/Invoke-PipelineValidation.ps1`
 
 ## Reference docs
 
-- Maester Azure DevOps guide: `/.resources/maester/website/docs/monitoring/azure-devops.md`
-- Maester Azure DevOps WebApp+Bicep guide: `/.resources/maester/website/docs/monitoring/azure-devops-web-app-bicep.md`
+- Maester Azure DevOps guide: https://maester.dev/docs/monitoring/azure-devops
 - Azure DevOps pipeline schedule syntax: https://learn.microsoft.com/azure/devops/pipelines/process/scheduled-triggers
 - Azure Developer CLI hooks: https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-extensibility
