@@ -13,7 +13,7 @@ param(
   [string]$Branch = 'main',
 
   [Parameter(Mandatory = $false)]
-  [int]$TimeoutMinutes = 45,
+  [int]$TimeoutMinutes = 30,
 
   [Parameter(Mandatory = $false)]
   [string]$SubscriptionId,

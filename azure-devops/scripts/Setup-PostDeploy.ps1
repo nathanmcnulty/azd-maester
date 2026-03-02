@@ -551,6 +551,50 @@ function Remove-DirectoryQuiet {
     }
   }
 }
+
+function Get-EmptyAdoRepositoryCandidate {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Organization,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Project,
+
+    [Parameter(Mandatory = $false)]
+    [string]$RequestedRepositoryName
+  )
+
+  $projectEncoded = [System.Uri]::EscapeDataString($Project)
+  $repositoriesUri = "https://dev.azure.com/$Organization/$projectEncoded/_apis/git/repositories?api-version=7.1-preview.1"
+  $repositoriesResponse = Invoke-ADOPSRestMethod -Method GET -Uri $repositoriesUri
+  $repositories = @($repositoriesResponse.value)
+  if ($repositories.Count -eq 0) {
+    return $null
+  }
+
+  $priorityNames = @()
+  if (-not [string]::IsNullOrWhiteSpace($Project)) {
+    $priorityNames += $Project
+  }
+  if (-not [string]::IsNullOrWhiteSpace($RequestedRepositoryName) -and $RequestedRepositoryName -ine $Project) {
+    $priorityNames += $RequestedRepositoryName
+  }
+
+  foreach ($priorityName in $priorityNames) {
+    $preferredEmptyRepository = @($repositories | Where-Object {
+        ([string](Get-OptionalPropertyValue -InputObject $_ -PropertyNames @('name')) -ieq $priorityName) -and
+        [string]::IsNullOrWhiteSpace([string](Get-OptionalPropertyValue -InputObject $_ -PropertyNames @('defaultBranch')))
+      }) | Select-Object -First 1
+    if ($preferredEmptyRepository) {
+      return $preferredEmptyRepository
+    }
+  }
+
+  return @($repositories | Where-Object {
+      [string]::IsNullOrWhiteSpace([string](Get-OptionalPropertyValue -InputObject $_ -PropertyNames @('defaultBranch')))
+    } | Select-Object -First 1)
+}
+
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
 
@@ -740,6 +784,7 @@ if (-not $projectInfo) {
   throw "Azure DevOps project '$AdoProject' was not found in organization '$AdoOrganization'."
 }
 
+$requestedRepositoryName = $AdoRepositoryName
 $repository = $null
 try {
   $repository = Get-ADOPSRepository -Project $AdoProject -Repository $AdoRepositoryName -Organization $AdoOrganization -ErrorAction Stop
@@ -753,8 +798,26 @@ if (-not $repository) {
     throw "Azure DevOps repository '$AdoRepositoryName' was not found and CreateRepositoryIfMissing=false."
   }
 
-  Write-Host "Creating Azure DevOps repository '$AdoRepositoryName'..."
-  $repository = New-ADOPSRepository -Name $AdoRepositoryName -Project $AdoProject -Organization $AdoOrganization
+  $emptyRepositoryCandidate = $null
+  try {
+    $emptyRepositoryCandidate = Get-EmptyAdoRepositoryCandidate -Organization $AdoOrganization -Project $AdoProject -RequestedRepositoryName $requestedRepositoryName
+  }
+  catch {
+    Write-Warning "Could not evaluate existing repositories before creation. Error: $($_.Exception.Message)"
+  }
+
+  if ($emptyRepositoryCandidate) {
+    $repository = $emptyRepositoryCandidate
+    $candidateName = [string](Get-OptionalPropertyValue -InputObject $repository -PropertyNames @('name'))
+    if (-not [string]::IsNullOrWhiteSpace($candidateName)) {
+      $AdoRepositoryName = $candidateName
+    }
+    Write-Host "Using existing empty Azure DevOps repository '$AdoRepositoryName' instead of creating '$requestedRepositoryName'."
+  }
+  else {
+    Write-Host "Creating Azure DevOps repository '$AdoRepositoryName'..."
+    $repository = New-ADOPSRepository -Name $AdoRepositoryName -Project $AdoProject -Organization $AdoOrganization
+  }
 }
 
 $repositoryId = [string](Get-OptionalPropertyValue -InputObject $repository -PropertyNames @('id'))
@@ -1640,7 +1703,7 @@ if ($ValidatePipelineRun) {
     -AdoProject $AdoProject `
     -PipelineName $AdoPipelineName `
     -Branch $DefaultBranch `
-    -TimeoutMinutes 45 `
+    -TimeoutMinutes 30 `
     -SubscriptionId $SubscriptionId `
     -TenantId $TenantId `
     -PassThru
