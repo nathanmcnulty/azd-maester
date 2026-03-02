@@ -11,6 +11,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-PreProvision.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-Helpers.psm1') -Force
 
 $location = $env:AZURE_LOCATION
 Invoke-MaesterPreProvision `

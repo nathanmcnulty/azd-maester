@@ -22,13 +22,13 @@ function Get-AzdEnvironmentValues {
     [string]$EnvironmentName
   )
 
-  $args = @('env', 'get-values', '--output', 'json')
+  $azdArgs = @('env', 'get-values', '--output', 'json')
   if (-not [string]::IsNullOrWhiteSpace($EnvironmentName)) {
-    $args += @('--environment', $EnvironmentName)
+    $azdArgs += @('--environment', $EnvironmentName)
   }
 
   try {
-    $raw = & azd @args 2>$null
+    $raw = & azd @azdArgs 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) {
       return @{}
     }

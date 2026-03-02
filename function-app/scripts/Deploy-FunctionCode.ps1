@@ -164,13 +164,21 @@ $maxRetries = 3
 $deployed = $false
 for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
   Write-Host "Zip deploy attempt $attempt of $maxRetries..."
-  & az functionapp deployment source config-zip `
+  $deployOutput = & az functionapp deployment source config-zip `
     --subscription $SubscriptionId `
     --resource-group $ResourceGroupName `
     --name $FunctionAppName `
     --src $zipPath `
     --timeout 300 `
     --output none 2>&1
+  foreach ($line in $deployOutput) {
+    $text = if ($line -is [System.Management.Automation.ErrorRecord]) { $line.Exception.Message } else { "$line" }
+    if ($text -match '^WARNING:\s*(.+)') {
+      Write-Host "Deployment status: $($Matches[1])"
+    } elseif ($text) {
+      Write-Host $text
+    }
+  }
   if ($LASTEXITCODE -eq 0) {
     $deployed = $true
     break

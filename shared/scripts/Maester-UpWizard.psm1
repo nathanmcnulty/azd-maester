@@ -478,9 +478,41 @@ function Invoke-MaesterUpWizard {
         -InteractiveWizard $interactiveWizard
 
       $envLower = $environmentName.ToLower()
-      $repositoryName = Get-AzdEnvironmentValue -Values $envValues -Name 'AZDO_REPOSITORY'
-      if ([string]::IsNullOrWhiteSpace($repositoryName)) {
-        $repositoryName = "maester-$envLower"
+      $repositoryNameSaved = Get-AzdEnvironmentValue -Values $envValues -Name 'AZDO_REPOSITORY'
+      $repositoryName = if ([string]::IsNullOrWhiteSpace($repositoryNameSaved)) { "maester-$envLower" } else { $repositoryNameSaved }
+
+      if ($interactiveWizard -and [string]::IsNullOrWhiteSpace($repositoryNameSaved)) {
+        $existingRepoFound = $false
+        try {
+          $projectEncoded = [System.Uri]::EscapeDataString($project)
+          $reposResponse = Invoke-AzRestMethod -Method GET `
+            -Uri "https://dev.azure.com/$organization/$projectEncoded/_apis/git/repositories?api-version=7.1-preview.1" `
+            -ResourceId '499b84ac-1321-427f-aa17-267ca6975798'
+          if ($reposResponse.StatusCode -eq 200) {
+            $reposPayload = $reposResponse.Content | ConvertFrom-Json
+            $existingRepoFound = @($reposPayload.value | Where-Object { $_.name -ieq $repositoryName }).Count -gt 0
+          }
+        }
+        catch {
+          # Cannot check - continue silently and let Setup-PostDeploy.ps1 handle it
+        }
+
+        if ($existingRepoFound) {
+          Write-Host "Repository '$repositoryName' already exists in project '$project'."
+          $useExisting = Read-BoolChoice `
+            -Prompt "Use the existing '$repositoryName' repository (pipeline files will be pushed to it)?" `
+            -CurrentValue $null `
+            -InteractiveDefault $true `
+            -InteractiveWizard $interactiveWizard
+          if (-not $useExisting) {
+            $repositoryName = Read-TextChoice `
+              -Prompt 'New repository name to create' `
+              -CurrentValue '' `
+              -FallbackValue '' `
+              -AllowEmpty $false `
+              -InteractiveWizard $interactiveWizard
+          }
+        }
       }
       $pipelineName = Get-AzdEnvironmentValue -Values $envValues -Name 'AZDO_PIPELINE_NAME'
       if ([string]::IsNullOrWhiteSpace($pipelineName)) {

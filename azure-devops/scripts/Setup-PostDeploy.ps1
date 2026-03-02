@@ -269,6 +269,51 @@ function Test-AdoServiceConnectionAuthorizedForPipelines {
 
   return $true
 }
+
+function Set-AdoRepositoryAuthorizedForPipelines {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Organization,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Project,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ProjectId,
+
+    [Parameter(Mandatory = $true)]
+    [string]$RepositoryId,
+
+    [Parameter(Mandatory = $true)]
+    [string]$RepositoryName
+  )
+
+  $projectEncoded = [System.Uri]::EscapeDataString($Project)
+  $permissionsUri = "https://dev.azure.com/$Organization/$projectEncoded/_apis/pipelines/pipelinePermissions/repository/$($ProjectId).$($RepositoryId)?api-version=7.1-preview.1"
+  $adoResourceId = '499b84ac-1321-427f-aa17-267ca6975798'
+
+  $existingResponse = Invoke-AzRestMethod -Method GET -Uri $permissionsUri -ResourceId $adoResourceId
+  if (-not [string]::IsNullOrWhiteSpace($existingResponse.Content)) {
+    $existingPayload = $existingResponse.Content | ConvertFrom-Json
+    if ($existingPayload -and $existingPayload.PSObject.Properties['allPipelines']) {
+      $existingAuthorized = ConvertTo-BoolOrDefault -Value ([string]$existingPayload.allPipelines.authorized) -Default $false
+      if ($existingAuthorized) {
+        return
+      }
+    }
+  }
+
+  Write-Host "Granting pipeline access to repository '$RepositoryName'..."
+  $patchBody = @{
+    allPipelines = @{
+      authorized = $true
+    }
+    pipelines   = @()
+  } | ConvertTo-Json -Depth 10 -Compress
+
+  Invoke-AzRestMethod -Method PATCH -Uri $permissionsUri -ResourceId $adoResourceId -Payload $patchBody | Out-Null
+}
+
 function global:Invoke-MgGraphRequest {
   [CmdletBinding()]
   param(
@@ -721,6 +766,16 @@ if ([string]::IsNullOrWhiteSpace($repositoryId)) {
 }
 if ([string]::IsNullOrWhiteSpace($repositoryUrl)) {
   throw "Could not determine clone URL for repository '$AdoRepositoryName'."
+}
+
+$projectId = [string](Get-OptionalPropertyValue -InputObject $projectInfo -PropertyNames @('id'))
+if (-not [string]::IsNullOrWhiteSpace($projectId)) {
+  Set-AdoRepositoryAuthorizedForPipelines `
+    -Organization $AdoOrganization `
+    -Project $AdoProject `
+    -ProjectId $projectId `
+    -RepositoryId $repositoryId `
+    -RepositoryName $AdoRepositoryName
 }
 
 $serviceConnection = $null

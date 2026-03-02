@@ -218,7 +218,7 @@ if ($validateOnProvision -and $validateOnProvision.Trim().ToLower() -eq 'true') 
   $testParams = @{
     SubscriptionId    = $SubscriptionId
     ResourceGroupName = $ResourceGroupName
-    TimeoutMinutes    = 3
+    TimeoutMinutes    = 5
   }
   if ($TenantId) {
     $testParams['TenantId'] = $TenantId
