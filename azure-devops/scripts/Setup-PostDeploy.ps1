@@ -723,8 +723,9 @@ if (-not $PSBoundParameters.ContainsKey('ValidatePipelineRun')) {
   $ValidatePipelineRun = ConvertTo-BoolOrDefault -Value $validatePipelineRunValue -Default $true
 }
 if (-not $PSBoundParameters.ContainsKey('FailOnTestFailures')) {
-  $failOnTestFailuresValue = if ($env:AZDO_FAIL_ON_TEST_FAILURES) { $env:AZDO_FAIL_ON_TEST_FAILURES } else { Get-EnvValue -Lines $envLines -Name 'AZDO_FAIL_ON_TEST_FAILURES' }
-  $FailOnTestFailures = ConvertTo-BoolOrDefault -Value $failOnTestFailuresValue -Default $false
+  # Always default to $false; do not persist across deployments since the old default was $true
+  # and stored env values of 'true' would otherwise propagate indefinitely, causing pipeline failures.
+  $FailOnTestFailures = $false
 }
 
 $SubscriptionId = Test-RequiredValue -Value $SubscriptionId -Name 'SubscriptionId'

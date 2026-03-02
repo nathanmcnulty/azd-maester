@@ -170,7 +170,8 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     --name $FunctionAppName `
     --src $zipPath `
     --timeout 300 `
-    --output none 2>&1
+    --output none `
+    --only-show-errors 2>&1
   foreach ($line in $deployOutput) {
     $text = if ($line -is [System.Management.Automation.ErrorRecord]) { $line.Exception.Message } else { "$line" }
     if ($text -match '^WARNING:\s*(.+)') {

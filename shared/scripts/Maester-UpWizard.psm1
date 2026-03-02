@@ -543,7 +543,7 @@ function Invoke-MaesterUpWizard {
       $createRepo = if ($null -ne $createRepoCurrent) { [bool]$createRepoCurrent } else { $true }
       $pushFiles = if ($null -ne $pushFilesCurrent) { [bool]$pushFilesCurrent } else { $true }
       $validateRun = if ($null -ne $validateRunCurrent) { [bool]$validateRunCurrent } else { $true }
-      $failTests = if ($null -ne $failTestsCurrent) { [bool]$failTestsCurrent } else { $true }
+      $failTests = if ($null -ne $failTestsCurrent) { [bool]$failTestsCurrent } else { $false }
 
       Set-AzdEnvValueStrict -Name 'AZDO_ORGANIZATION' -Value $organization
       Set-AzdEnvValueStrict -Name 'AZDO_PROJECT' -Value $project
