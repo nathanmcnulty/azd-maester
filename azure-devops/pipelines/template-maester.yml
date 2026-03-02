@@ -67,25 +67,3 @@ jobs:
       testResultsFormat: NUnit
       testResultsFiles: '**/test-results.xml'
       failTaskOnFailedTests: $(FailOnTestFailures)
-
-  - pwsh: |
-      $reportDir = Join-Path '$(System.DefaultWorkingDirectory)' 'coverage-report'
-      New-Item -Path $reportDir -ItemType Directory -Force | Out-Null
-      $src = Join-Path '$(System.DefaultWorkingDirectory)' 'test-results' 'latest.html'
-      if (Test-Path $src) {
-        Copy-Item $src (Join-Path $reportDir 'index.html') -Force
-      }
-      $ts = [int]([System.DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
-      $xml = "<?xml version=`"1.0`"?><coverage line-rate=`"1`" branch-rate=`"0`" lines-covered=`"1`" lines-valid=`"1`" branches-covered=`"0`" branches-valid=`"0`" complexity=`"0`" version=`"1`" timestamp=`"$ts`"><sources/><packages/></coverage>"
-      Set-Content -Path (Join-Path $reportDir 'coverage.xml') -Value $xml -Encoding UTF8
-    displayName: Prepare Maester Report for Code Coverage
-    condition: always()
-
-  - task: PublishCodeCoverageResults@1
-    displayName: Publish Maester Report to Code Coverage
-    condition: always()
-    inputs:
-      codeCoverageTool: Cobertura
-      summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage-report/coverage.xml'
-      reportDirectory: '$(System.DefaultWorkingDirectory)/coverage-report'
-      failIfCoverageEmpty: false
