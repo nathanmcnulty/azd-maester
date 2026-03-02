@@ -26,40 +26,44 @@ variables:
   MailRecipient: '__MAIL_RECIPIENT__'
   FailOnTestFailures: '__FAIL_ON_TEST_FAILURES__'
 
-steps:
-- checkout: self
-  fetchDepth: 1
+jobs:
+- job: MaesterRun
+  displayName: Maester Run
+  timeoutInMinutes: 30
+  steps:
+  - checkout: self
+    fetchDepth: 1
 
-- task: AzurePowerShell@5
-  displayName: Run Maester
-  inputs:
-    azureSubscription: '$(ServiceConnection)'
-    pwsh: true
-    azurePowerShellVersion: LatestVersion
-    ScriptType: FilePath
-    ScriptPath: 'scripts/Invoke-MaesterAzureDevOpsRun.ps1'
-    ScriptArguments: >
-      -IncludeExchange $(IncludeExchange)
-      -IncludeTeams $(IncludeTeams)
-      -IncludeAzure $(IncludeAzure)
-      -IncludeWebApp $(IncludeWebApp)
-      -StorageAccountName "$(StorageAccountName)"
-      -WebAppName "$(WebAppName)"
-      -WebAppResourceGroup "$(WebAppResourceGroup)"
-      -TenantId "$(TenantId)"
-      -ClientId "$(ClientId)"
-      -MailRecipient "$(MailRecipient)"
-      -FailOnTestFailures $(FailOnTestFailures)
+  - task: AzurePowerShell@5
+    displayName: Run Maester
+    inputs:
+      azureSubscription: '$(ServiceConnection)'
+      pwsh: true
+      azurePowerShellVersion: LatestVersion
+      ScriptType: FilePath
+      ScriptPath: 'scripts/Invoke-MaesterAzureDevOpsRun.ps1'
+      ScriptArguments: >
+        -IncludeExchange $(IncludeExchange)
+        -IncludeTeams $(IncludeTeams)
+        -IncludeAzure $(IncludeAzure)
+        -IncludeWebApp $(IncludeWebApp)
+        -StorageAccountName "$(StorageAccountName)"
+        -WebAppName "$(WebAppName)"
+        -WebAppResourceGroup "$(WebAppResourceGroup)"
+        -TenantId "$(TenantId)"
+        -ClientId "$(ClientId)"
+        -MailRecipient "$(MailRecipient)"
+        -FailOnTestFailures $(FailOnTestFailures)
 
-- publish: $(System.DefaultWorkingDirectory)/test-results
-  displayName: Publish Maester Html Report
-  artifact: TestResults
-  condition: always()
+  - publish: $(System.DefaultWorkingDirectory)/test-results
+    displayName: Publish Maester Html Report
+    artifact: TestResults
+    condition: always()
 
-- task: PublishTestResults@2
-  displayName: Publish Pester Test Results
-  condition: always()
-  inputs:
-    testResultsFormat: NUnit
-    testResultsFiles: '**/test-results.xml'
-    failTaskOnFailedTests: $(FailOnTestFailures)
+  - task: PublishTestResults@2
+    displayName: Publish Pester Test Results
+    condition: always()
+    inputs:
+      testResultsFormat: NUnit
+      testResultsFiles: '**/test-results.xml'
+      failTaskOnFailedTests: $(FailOnTestFailures)

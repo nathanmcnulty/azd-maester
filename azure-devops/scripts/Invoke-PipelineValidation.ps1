@@ -162,6 +162,7 @@ if ([string]::IsNullOrWhiteSpace($runState)) {
 $runResult = [string](Get-OptionalPropertyValue -InputObject $run -PropertyName 'result')
 $runUrl = $null
 $lastStatusMessage = $null
+$notStartedSince = $null
 
 $runDetailsUri = "https://dev.azure.com/$AdoOrganization/$AdoProject/_apis/pipelines/$pipelineId/runs/$($runId)?api-version=7.1-preview.1"
 while ((Get-Date) -lt $deadline) {
@@ -193,6 +194,29 @@ while ((Get-Date) -lt $deadline) {
   if ($statusMessage -ne $lastStatusMessage) {
     Write-Host $statusMessage
     $lastStatusMessage = $statusMessage
+  }
+
+  if ($runState -eq 'notStarted') {
+    if ($null -eq $notStartedSince) {
+      $notStartedSince = Get-Date
+    }
+    $notStartedMinutes = [int]([Math]::Floor(((Get-Date) - $notStartedSince).TotalMinutes))
+    if ($notStartedMinutes -ge 3) {
+      $pipelinesUrl = "https://dev.azure.com/$AdoOrganization/$AdoProject/_build"
+      Write-Warning ("Pipeline run has been queued for $notStartedMinutes minute(s) without starting. " +
+        "This may indicate all parallel jobs are in use by other in-progress runs. " +
+        "Check for stuck in-progress pipeline runs across your ADO organization and cancel them to free a parallel job slot.")
+      Write-Warning "Pipelines list: $pipelinesUrl"
+      if ($runUrl) {
+        Write-Warning "Current run: $runUrl"
+      }
+      throw ("Pipeline run '$runId' was queued for $notStartedMinutes minute(s) without starting. " +
+        "No parallel job slots are available. Cancel other in-progress pipeline runs and retry. " +
+        "Pipelines: $pipelinesUrl")
+    }
+  }
+  else {
+    $notStartedSince = $null
   }
 
   if ($runState -eq 'completed') {
