@@ -70,8 +70,6 @@ function Invoke-MaesterPreProvision {
     throw 'Git is required for Azure DevOps repository bootstrap but was not found on PATH.'
   }
 
-  Import-Module Az.Accounts -Force
-
   if ($RequireAdopsModule) {
     Import-Module (Join-Path $PSScriptRoot 'Maester-SetupHelpers.psm1') -Force
 
@@ -81,43 +79,23 @@ function Invoke-MaesterPreProvision {
     }
   }
 
-  $existingContext = Get-AzContext -ErrorAction SilentlyContinue
-  $requiresLogin = $true
-  if ($existingContext -and $existingContext.Subscription -and $existingContext.Subscription.Id -eq $SubscriptionId) {
-    if (-not $TenantId -or ($existingContext.Tenant -and $existingContext.Tenant.Id -eq $TenantId)) {
-      $requiresLogin = $false
-    }
-  }
-
-  if ($requiresLogin) {
-    $connectParameters = @{ Subscription = $SubscriptionId }
-    if ($TenantId) {
-      $connectParameters['Tenant'] = $TenantId
-    }
-    Connect-AzAccount @connectParameters | Out-Null
-  }
-
-  Get-AzAccessToken -ResourceTypeName Arm | Out-Null
-
-  if ($RequireAdoToken) {
-    Get-AzAccessToken -ResourceUrl '499b84ac-1321-427f-aa17-267ca6975798' | Out-Null
-  }
-
-  if (-not $TenantId) {
-    $context = Get-AzContext
-    if ($context -and $context.Tenant) {
-      $TenantId = $context.Tenant.Id
-    }
-  }
+  if ($SubscriptionId) { az account set --subscription $SubscriptionId 2>$null | Out-Null }
+  $azAccount = az account show 2>$null | ConvertFrom-Json
+  if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
+  if (-not $SubscriptionId) { $SubscriptionId = $azAccount.id }
+  if (-not $TenantId) { $TenantId = $azAccount.tenantId }
 
   if ([string]::IsNullOrWhiteSpace($TenantId)) {
     throw 'AZURE_TENANT_ID could not be resolved during preprovision.'
   }
 
   if ($RequireGraphProbe) {
-    $graphProbe = Invoke-AzRestMethod -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=id&$top=1'
-    if ($graphProbe.StatusCode -ge 400) {
-      throw "Microsoft Graph access check failed during preprovision. HTTP $($graphProbe.StatusCode): $($graphProbe.Content)"
+    $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($graphToken)) { throw "Microsoft Graph access check failed during preprovision. Re-run: azd auth login" }
+    try {
+      Invoke-RestMethod -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=id&$top=1' -Headers @{ Authorization = "Bearer $graphToken" } | Out-Null
+    } catch {
+      throw "Microsoft Graph access check failed during preprovision: $($_.Exception.Message). Re-run: azd auth login"
     }
   }
   else {

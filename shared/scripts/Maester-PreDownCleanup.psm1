@@ -20,13 +20,19 @@ function Remove-ResourceGroupLocks {
 
   Write-Host "Removing resource locks in '$ResourceGroupName' (if any)..."
   $locksUrl = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Authorization/locks?api-version=2016-09-01"
-  $locksRaw = & az rest --method get --url $locksUrl --subscription $SubscriptionId 2>$null
-  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($locksRaw)) {
+  $armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv 2>$null
+  $locksPayload = $null
+  try {
+    $locksPayload = Invoke-RestMethod -Method GET -Uri $locksUrl -Headers @{ Authorization = "Bearer $armToken" }
+  }
+  catch {
+    return
+  }
+  if (-not $locksPayload) {
     return
   }
 
   try {
-    $locksPayload = $locksRaw | ConvertFrom-Json
     $lockIds = @($locksPayload.value | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     foreach ($lockId in $lockIds) {
       Write-Host "  Removing lock: $($lockId.Split('/')[-1])"
@@ -57,13 +63,17 @@ function Remove-TrackedDirectoryRoleAssignments {
   }
 
   Write-Host 'Removing Teams Reader Entra role assignments created by this environment...'
+  $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+  $graphHeaders = @{ Authorization = "Bearer $graphToken" }
   foreach ($assignmentId in @($AssignmentIds)) {
     if ([string]::IsNullOrWhiteSpace($assignmentId)) {
       continue
     }
 
-    & az rest --method delete --url "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments/$assignmentId" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    try {
+      Invoke-RestMethod -Method DELETE -Uri "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments/$assignmentId" -Headers $graphHeaders | Out-Null
+    }
+    catch {
       Write-Warning "Failed to remove Teams Reader role assignment id '$assignmentId'."
     }
   }
@@ -108,13 +118,17 @@ function Remove-TrackedExchangeAppRoleAssignments {
   }
 
   Write-Host 'Removing Exchange appRoleAssignments created by this environment...'
+  $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+  $graphHeaders = @{ Authorization = "Bearer $graphToken" }
   foreach ($assignmentId in @($AssignmentIds)) {
     if ([string]::IsNullOrWhiteSpace($assignmentId)) {
       continue
     }
 
-    & az rest --method delete --url "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments/$assignmentId" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    try {
+      Invoke-RestMethod -Method DELETE -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments/$assignmentId" -Headers $graphHeaders | Out-Null
+    }
+    catch {
       Write-Warning "Failed to remove Exchange appRoleAssignment id '$assignmentId'."
     }
   }
@@ -142,15 +156,17 @@ function Remove-ExchangeRbacAssignments {
     try {
       $exoToken = (az account get-access-token --resource https://outlook.office365.com --query accessToken -o tsv 2>$null)
       if ($exoToken) {
-        $domainsJson = az rest --method get --url 'https://graph.microsoft.com/v1.0/organization?$select=verifiedDomains' 2>$null
-        if ($domainsJson) {
-          $orgData = $domainsJson | ConvertFrom-Json
+        try {
+          $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+          $orgData = Invoke-RestMethod -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=verifiedDomains' -Headers @{ Authorization = "Bearer $graphToken" }
           if ($orgData.value -and $orgData.value.Count -gt 0) {
             $initialDomain = @($orgData.value[0].verifiedDomains | Where-Object { $_.isInitial -eq $true }) | Select-Object -First 1
             if ($initialDomain) {
               $exoOrganization = $initialDomain.name
             }
           }
+        }
+        catch {
         }
       }
     }
@@ -247,59 +263,47 @@ function Invoke-AdoRest {
     [switch]$AllowNotFound
   )
 
+  $adoToken = az account get-access-token --resource '499b84ac-1321-427f-aa17-267ca6975798' --query accessToken -o tsv 2>$null
+  $adoHeaders = @{ Authorization = "Bearer $adoToken" }
+
   $invokeParams = @{
-    Method     = $Method
-    Uri        = $Uri
-    ResourceId = '499b84ac-1321-427f-aa17-267ca6975798'
+    Method  = $Method
+    Uri     = $Uri
+    Headers = $adoHeaders
   }
 
   if ($PSBoundParameters.ContainsKey('Body') -and $null -ne $Body) {
-    if ($Body -is [string]) {
-      $invokeParams['Payload'] = $Body
-    }
-    else {
-      $invokeParams['Payload'] = ($Body | ConvertTo-Json -Depth 20 -Compress)
-    }
-  }
-
-  $response = Invoke-AzRestMethod @invokeParams
-  $statusCode = 0
-  [void][int]::TryParse(([string]$response.StatusCode), [ref]$statusCode)
-  if ($statusCode -eq 404 -and $AllowNotFound) {
-    return $null
-  }
-  if ($statusCode -ge 400) {
-    $message = $null
-    if (-not [string]::IsNullOrWhiteSpace($response.Content)) {
-      try {
-        $errorPayload = $response.Content | ConvertFrom-Json
-        if ($errorPayload.PSObject.Properties['message']) {
-          $message = [string]$errorPayload.message
-        }
-        elseif ($errorPayload.PSObject.Properties['value'] -and $errorPayload.value.PSObject.Properties['Message']) {
-          $message = [string]$errorPayload.value.Message
-        }
-      }
-      catch {
-      }
-    }
-
-    if ([string]::IsNullOrWhiteSpace($message)) {
-      throw "Azure DevOps REST call failed with status ${statusCode}: $Method $Uri"
-    }
-
-    throw "Azure DevOps REST call failed with status ${statusCode}: $Method $Uri. $message"
-  }
-
-  if ($null -eq $response -or [string]::IsNullOrWhiteSpace($response.Content)) {
-    return $null
+    $bodyStr = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 20 -Compress }
+    $invokeParams['Body'] = $bodyStr
+    $invokeParams['ContentType'] = 'application/json'
   }
 
   try {
-    return ($response.Content | ConvertFrom-Json)
+    $result = Invoke-RestMethod @invokeParams -SkipHttpErrorCheck -StatusCodeVariable responseStatus
+    if ($responseStatus -eq 404 -and $AllowNotFound) {
+      return $null
+    }
+    if ($responseStatus -ge 400) {
+      $message = $null
+      if ($result -and $result.PSObject.Properties['message']) {
+        $message = [string]$result.message
+      }
+      elseif ($result -and $result.PSObject.Properties['value'] -and $result.value.PSObject.Properties['Message']) {
+        $message = [string]$result.value.Message
+      }
+
+      if ([string]::IsNullOrWhiteSpace($message)) {
+        throw "Azure DevOps REST call failed: $Method $Uri. HTTP $responseStatus"
+      }
+      throw "Azure DevOps REST call failed: $Method $Uri. $message"
+    }
+    return $result
   }
   catch {
-    return $response.Content
+    if ($AllowNotFound -and $_.Exception.Message -match '404|Not Found') {
+      return $null
+    }
+    throw
   }
 }
 
@@ -376,8 +380,6 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
   [CmdletBinding()]
   param()
 
-  Import-Module Az.Accounts -Force
-
   $envValues = Get-AzdEnvironmentValues
   if (-not $envValues -or $envValues.Count -eq 0) {
     Write-Warning 'Could not load azd environment values during Azure DevOps predown cleanup. Skipping.'
@@ -386,7 +388,6 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
 
   $resourceGroupName = Get-AzdEnvironmentValue -Values $envValues -Name 'AZURE_RESOURCE_GROUP'
   $subscriptionId = Get-AzdEnvironmentValue -Values $envValues -Name 'AZURE_SUBSCRIPTION_ID'
-  $tenantId = Get-AzdEnvironmentValue -Values $envValues -Name 'AZURE_TENANT_ID'
   $adoOrganization = Get-AzdEnvironmentValue -Values $envValues -Name 'AZDO_ORGANIZATION'
   $adoProject = Get-AzdEnvironmentValue -Values $envValues -Name 'AZDO_PROJECT'
   $adoRepositoryName = Get-AzdEnvironmentValue -Values $envValues -Name 'AZDO_REPOSITORY'
@@ -416,14 +417,12 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
     try {
       $exchangeManageAsAppRoleId = 'dc50a0fb-09a3-484d-be87-e023b12c6440'
       $appAssignmentsUrl = "https://graph.microsoft.com/v1.0/servicePrincipals/$workloadServicePrincipalObjectId/appRoleAssignments?`$select=id,appRoleId"
-      $appAssignmentsRaw = & az rest --method get --url $appAssignmentsUrl 2>$null
-      if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($appAssignmentsRaw)) {
-        $appAssignmentsPayload = $appAssignmentsRaw | ConvertFrom-Json
-        $resolvedAssignmentIds = @($appAssignmentsPayload.value | Where-Object { $_.appRoleId -eq $exchangeManageAsAppRoleId } | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        if ($resolvedAssignmentIds.Count -gt 0) {
-          $exoAppRoleAssignmentIds = @($resolvedAssignmentIds)
-          Write-Host "Resolved $($exoAppRoleAssignmentIds.Count) Exchange appRoleAssignment id(s) from Microsoft Graph for cleanup."
-        }
+      $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+      $appAssignmentsPayload = Invoke-RestMethod -Method GET -Uri $appAssignmentsUrl -Headers @{ Authorization = "Bearer $graphToken" }
+      $resolvedAssignmentIds = @($appAssignmentsPayload.value | Where-Object { $_.appRoleId -eq $exchangeManageAsAppRoleId } | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      if ($resolvedAssignmentIds.Count -gt 0) {
+        $exoAppRoleAssignmentIds = @($resolvedAssignmentIds)
+        Write-Host "Resolved $($exoAppRoleAssignmentIds.Count) Exchange appRoleAssignment id(s) from Microsoft Graph for cleanup."
       }
     }
     catch {
@@ -432,21 +431,9 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
   }
 
   if (-not [string]::IsNullOrWhiteSpace($subscriptionId)) {
-    $existingContext = Get-AzContext -ErrorAction SilentlyContinue
-    $requiresLogin = $true
-    if ($existingContext -and $existingContext.Subscription -and $existingContext.Subscription.Id -eq $subscriptionId) {
-      if (-not $tenantId -or ($existingContext.Tenant -and $existingContext.Tenant.Id -eq $tenantId)) {
-        $requiresLogin = $false
-      }
-    }
-
-    if ($requiresLogin) {
-      $connectParameters = @{ Subscription = $subscriptionId }
-      if ($tenantId) {
-        $connectParameters['Tenant'] = $tenantId
-      }
-      Connect-AzAccount @connectParameters | Out-Null
-    }
+    az account set --subscription $subscriptionId 2>$null | Out-Null
+    $azAccount = az account show 2>$null | ConvertFrom-Json
+    if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
   }
 
   if (-not [string]::IsNullOrWhiteSpace($resourceGroupName) -and -not [string]::IsNullOrWhiteSpace($subscriptionId)) {
@@ -559,8 +546,11 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
 
   if (-not [string]::IsNullOrWhiteSpace($workloadAppObjectId)) {
     Write-Host "Removing workload identity Entra application object '$workloadAppObjectId'..."
-    & az rest --method delete --url "https://graph.microsoft.com/v1.0/applications/$workloadAppObjectId" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    try {
+      $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+      Invoke-RestMethod -Method DELETE -Uri "https://graph.microsoft.com/v1.0/applications/$workloadAppObjectId" -Headers @{ Authorization = "Bearer $graphToken" } | Out-Null
+    }
+    catch {
       Write-Warning "Failed to remove Entra application object '$workloadAppObjectId'."
     }
   }

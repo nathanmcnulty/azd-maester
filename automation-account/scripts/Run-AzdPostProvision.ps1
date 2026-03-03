@@ -51,8 +51,6 @@ function Get-EnvValue {
   return $null
 }
 
-Import-Module Az.Accounts -Force
-
 if (-not $SubscriptionId) {
   $SubscriptionId = $env:AZURE_SUBSCRIPTION_ID
 }
@@ -224,8 +222,10 @@ $testParams['PassThru'] = $true
 
 $validationResult = & "$PSScriptRoot\Invoke-RunbookValidation.ps1" @testParams
 
+$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armHeaders = @{ Authorization = "Bearer $armToken" }
 $resourcesPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/resources?api-version=2021-04-01"
-$resourcesPayload = (Invoke-AzRestMethod -Method GET -Path $resourcesPath).Content | ConvertFrom-Json
+$resourcesPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$resourcesPath" -Headers $armHeaders
 $resources = @($resourcesPayload.value)
 $customDnsDocsUrl = 'https://learn.microsoft.com/azure/app-service/app-service-web-tutorial-custom-domain'
 
@@ -269,7 +269,7 @@ $easyAuthClientId = 'n/a'
 $easyAuthIssuer = 'n/a'
 if ($webAppResource) {
   $authPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$($webAppResource.name)/config/authsettingsV2?api-version=2023-12-01"
-  $auth = (Invoke-AzRestMethod -Method GET -Path $authPath).Content | ConvertFrom-Json
+  $auth = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$authPath" -Headers $armHeaders
   if ($auth.properties.identityProviders.azureActiveDirectory.registration.clientId) {
     $easyAuthClientId = $auth.properties.identityProviders.azureActiveDirectory.registration.clientId
   }

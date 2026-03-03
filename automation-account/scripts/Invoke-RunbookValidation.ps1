@@ -22,34 +22,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module Az.Accounts -Force
-
-$existingContext = Get-AzContext -ErrorAction SilentlyContinue
-$requiresLogin = $true
-if ($existingContext -and $existingContext.Subscription -and $existingContext.Subscription.Id -eq $SubscriptionId) {
-  if (-not $TenantId -or ($existingContext.Tenant -and $existingContext.Tenant.Id -eq $TenantId)) {
-    $requiresLogin = $false
-  }
-}
-
-if ($requiresLogin) {
-  $connectParameters = @{ Subscription = $SubscriptionId }
-  if ($TenantId) {
-    $connectParameters['Tenant'] = $TenantId
-  }
-  Connect-AzAccount @connectParameters | Out-Null
-}
-
-try {
-  Get-AzAccessToken -ResourceTypeName Arm | Out-Null
-}
-catch {
-  $connectParameters = @{ Subscription = $SubscriptionId }
-  if ($TenantId) {
-    $connectParameters['Tenant'] = $TenantId
-  }
-  Connect-AzAccount @connectParameters | Out-Null
-}
+if ($SubscriptionId) { az account set --subscription $SubscriptionId 2>$null | Out-Null }
+$azAccount = az account show 2>$null | ConvertFrom-Json
+if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
+if (-not $SubscriptionId) { $SubscriptionId = $azAccount.id }
+if (-not $TenantId) { $TenantId = $azAccount.tenantId }
+$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armHeaders = @{ Authorization = "Bearer $armToken" }
 
 $apiVersion = '2023-11-01'
 $jobId = [guid]::NewGuid().ToString()
@@ -62,26 +41,24 @@ $jobBody = @{
     }
     parameters = @{}
   }
-} | ConvertTo-Json -Depth 10
+} | ConvertTo-Json -Depth 10 -Compress
 
-Invoke-AzRestMethod -Method PUT -Path "$basePath/jobs/${jobId}?api-version=$apiVersion" -Payload $jobBody | Out-Null
+Invoke-RestMethod -Method PUT -Uri "https://management.azure.com$basePath/jobs/${jobId}?api-version=$apiVersion" -Headers $armHeaders -Body $jobBody -ContentType 'application/json' | Out-Null
 Write-Host "Started runbook job: $jobId"
 
 $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
 $status = 'New'
 do {
   Start-Sleep -Seconds 15
-  $jobResponse = Invoke-AzRestMethod -Method GET -Path "$basePath/jobs/${jobId}?api-version=$apiVersion"
-  $job = $jobResponse.Content | ConvertFrom-Json
+  $job = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$basePath/jobs/${jobId}?api-version=$apiVersion" -Headers $armHeaders
   $status = $job.properties.status
   Write-Host "Job status: $status"
 } while ($status -in @('New', 'Activating', 'Running', 'Queued') -and (Get-Date) -lt $deadline)
 
 $streams = @()
-$streamsPath = "$basePath/jobs/${jobId}/streams?api-version=$apiVersion"
+$streamsUrl = "https://management.azure.com$basePath/jobs/${jobId}/streams?api-version=$apiVersion"
 do {
-  $streamsResponse = Invoke-AzRestMethod -Method GET -Path $streamsPath
-  $streamsPayload = $streamsResponse.Content | ConvertFrom-Json
+  $streamsPayload = Invoke-RestMethod -Method GET -Uri $streamsUrl -Headers $armHeaders
   $hasValueProperty = $false
   $hasNextLinkProperty = $false
   if ($streamsPayload -and $streamsPayload.PSObject) {
@@ -101,11 +78,11 @@ do {
     $nextLink = $null
   }
   if ($nextLink) {
-    $streamsPath = if ($nextLink -like 'https://*') {
-      $nextLink -replace '^https://management\.azure\.com', ''
+    $streamsUrl = if ($nextLink -like 'https://*') {
+      $nextLink
     }
     else {
-      $nextLink
+      "https://management.azure.com$nextLink"
     }
   }
 } while ($nextLink)
@@ -113,14 +90,12 @@ do {
 foreach ($stream in $streams) {
   $streamType = $stream.properties.streamType
   $streamId = if ($stream.properties.jobStreamId) { $stream.properties.jobStreamId } else { ($stream.id -split '/')[-1] }
-  $streamContent = Invoke-AzRestMethod -Method GET -Path "$basePath/jobs/${jobId}/streams/${streamId}?api-version=$apiVersion"
-  $detail = $streamContent.Content | ConvertFrom-Json
+  $detail = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$basePath/jobs/${jobId}/streams/${streamId}?api-version=$apiVersion" -Headers $armHeaders
   Write-Host "[$streamType] $($detail.properties.summary)"
 }
 
 if ($status -ne 'Completed') {
-  $jobResponse = Invoke-AzRestMethod -Method GET -Path "$basePath/jobs/${jobId}?api-version=$apiVersion"
-  $job = $jobResponse.Content | ConvertFrom-Json
+  $job = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$basePath/jobs/${jobId}?api-version=$apiVersion" -Headers $armHeaders
   $exception = $job.properties.exception
   if ($exception) {
     throw "Runbook job did not complete successfully. Final status: $status. Exception: $exception"

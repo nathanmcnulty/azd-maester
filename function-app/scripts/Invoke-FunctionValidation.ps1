@@ -20,40 +20,18 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module Az.Accounts -Force
-
-$existingContext = Get-AzContext -ErrorAction SilentlyContinue
-$requiresLogin = $true
-if ($existingContext -and $existingContext.Subscription -and $existingContext.Subscription.Id -eq $SubscriptionId) {
-  if (-not $TenantId -or ($existingContext.Tenant -and $existingContext.Tenant.Id -eq $TenantId)) {
-    $requiresLogin = $false
-  }
-}
-
-if ($requiresLogin) {
-  $connectParameters = @{ Subscription = $SubscriptionId }
-  if ($TenantId) {
-    $connectParameters['Tenant'] = $TenantId
-  }
-  Connect-AzAccount @connectParameters | Out-Null
-}
-
-try {
-  Get-AzAccessToken -ResourceTypeName Arm | Out-Null
-}
-catch {
-  $connectParameters = @{ Subscription = $SubscriptionId }
-  if ($TenantId) {
-    $connectParameters['Tenant'] = $TenantId
-  }
-  Connect-AzAccount @connectParameters | Out-Null
-}
+if ($SubscriptionId) { az account set --subscription $SubscriptionId 2>$null | Out-Null }
+$azAccount = az account show 2>$null | ConvertFrom-Json
+if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
+if (-not $SubscriptionId) { $SubscriptionId = $azAccount.id }
+if (-not $TenantId) { $TenantId = $azAccount.tenantId }
+$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armHeaders = @{ Authorization = "Bearer $armToken" }
 
 # Discover function app if not specified
 if ([string]::IsNullOrWhiteSpace($FunctionAppName)) {
   $sitesPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites?api-version=2023-12-01"
-  $sitesResponse = Invoke-AzRestMethod -Method GET -Path $sitesPath
-  $sitesPayload = $sitesResponse.Content | ConvertFrom-Json
+  $sitesPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$sitesPath" -Headers $armHeaders
   $funcSite = @($sitesPayload.value | Where-Object { $_.kind -like '*functionapp*' }) | Select-Object -First 1
   if (-not $funcSite) {
     throw "No Function App was found in resource group '$ResourceGroupName'."
@@ -65,12 +43,7 @@ Write-Host "Validating Function App '$FunctionAppName'..."
 
 # Get master key via Azure REST API
 $keysPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$FunctionAppName/host/default/listkeys?api-version=2023-12-01"
-$keysResponse = Invoke-AzRestMethod -Method POST -Path $keysPath
-if ($keysResponse.StatusCode -ne 200) {
-  throw "Failed to retrieve Function App host keys. HTTP $($keysResponse.StatusCode): $($keysResponse.Content)"
-}
-
-$keysPayload = $keysResponse.Content | ConvertFrom-Json
+$keysPayload = Invoke-RestMethod -Method POST -Uri "https://management.azure.com$keysPath" -Headers $armHeaders -Body '{}' -ContentType 'application/json'
 $masterKey = $keysPayload.masterKey
 if ([string]::IsNullOrWhiteSpace($masterKey)) {
   throw "Master key was not found in Function App host keys response."
@@ -162,8 +135,7 @@ do {
   # Alternative: check if a recent blob appeared in the archive container
   try {
     $storageQuery = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Storage/storageAccounts?api-version=2023-05-01"
-    $storageResp = Invoke-AzRestMethod -Method GET -Path $storageQuery
-    $storagePayload = $storageResp.Content | ConvertFrom-Json
+    $storagePayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$storageQuery" -Headers $armHeaders -ErrorAction SilentlyContinue
     $storage = @($storagePayload.value | Where-Object { $_.name -like 'stmaester*' }) | Select-Object -First 1
     if (-not $storage) {
       $storage = $storagePayload.value | Select-Object -First 1
@@ -173,14 +145,7 @@ do {
       $storageName = $storage.name
 
       # List blobs in latest container to see if latest.html was recently updated
-      $armToken = (Get-AzAccessToken -ResourceUrl 'https://storage.azure.com/' -AsSecureString)
-      $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($armToken.Token)
-      try {
-        $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
-      }
-      finally {
-        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
-      }
+      $plainToken = az account get-access-token --resource https://storage.azure.com/ --query accessToken -o tsv 2>$null
 
       $blobHeaders = @{
         'Authorization' = "Bearer $plainToken"

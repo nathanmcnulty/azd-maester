@@ -61,7 +61,6 @@ if (-not $PSBoundParameters.ContainsKey('AppRoleValues')) {
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module Az.Accounts -Force
 Import-Module Microsoft.Graph.Authentication -Force
 
 $graphToken = $null

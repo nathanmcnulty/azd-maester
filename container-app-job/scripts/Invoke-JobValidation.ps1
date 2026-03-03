@@ -20,45 +20,19 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module Az.Accounts -Force
-
-$existingContext = Get-AzContext -ErrorAction SilentlyContinue
-$requiresLogin = $true
-if ($existingContext -and $existingContext.Subscription -and $existingContext.Subscription.Id -eq $SubscriptionId) {
-  if (-not $TenantId -or ($existingContext.Tenant -and $existingContext.Tenant.Id -eq $TenantId)) {
-    $requiresLogin = $false
-  }
-}
-
-if ($requiresLogin) {
-  $connectParameters = @{ Subscription = $SubscriptionId }
-  if ($TenantId) {
-    $connectParameters['Tenant'] = $TenantId
-  }
-  Connect-AzAccount @connectParameters | Out-Null
-}
-
-try {
-  Get-AzAccessToken -ResourceTypeName Arm | Out-Null
-}
-catch {
-  $connectParameters = @{ Subscription = $SubscriptionId }
-  if ($TenantId) {
-    $connectParameters['Tenant'] = $TenantId
-  }
-  Connect-AzAccount @connectParameters | Out-Null
-}
+if ($SubscriptionId) { az account set --subscription $SubscriptionId 2>$null | Out-Null }
+$azAccount = az account show 2>$null | ConvertFrom-Json
+if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
+if (-not $SubscriptionId) { $SubscriptionId = $azAccount.id }
+if (-not $TenantId) { $TenantId = $azAccount.tenantId }
+$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armHeaders = @{ Authorization = "Bearer $armToken" }
 
 $apiVersion = '2024-03-01'
 $basePath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.App/jobs/$ContainerAppJobName"
 
 # Start the Container App Job execution
-$startResponse = Invoke-AzRestMethod -Method POST -Path "$basePath/start?api-version=$apiVersion" -Payload '{}'
-if ($startResponse.StatusCode -lt 200 -or $startResponse.StatusCode -gt 299) {
-  throw "Failed to start Container App Job '$ContainerAppJobName'. HTTP $($startResponse.StatusCode): $($startResponse.Content)"
-}
-
-$startPayload = $startResponse.Content | ConvertFrom-Json
+$startPayload = Invoke-RestMethod -Method POST -Uri "https://management.azure.com$basePath/start?api-version=$apiVersion" -Headers $armHeaders -Body '{}' -ContentType 'application/json'
 $executionName = $startPayload.name
 if ([string]::IsNullOrWhiteSpace($executionName)) {
   # Some API versions return the execution name in different fields
@@ -72,13 +46,12 @@ $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
 $status = 'Running'
 do {
   Start-Sleep -Seconds 15
-  $execResponse = Invoke-AzRestMethod -Method GET -Path "$basePath/executions/${executionName}?api-version=$apiVersion"
-  if ($execResponse.StatusCode -ne 200) {
-    Write-Warning "Failed to check execution status. HTTP $($execResponse.StatusCode). Retrying..."
+  $execPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$basePath/executions/${executionName}?api-version=$apiVersion" -Headers $armHeaders -ErrorAction SilentlyContinue
+  if (-not $execPayload) {
+    Write-Warning "Failed to check execution status. Retrying..."
     continue
   }
 
-  $execPayload = $execResponse.Content | ConvertFrom-Json
   $status = $execPayload.properties.status
   Write-Host "Execution status: $status"
 } while ($status -in @('Running', 'Processing', 'Unknown') -and (Get-Date) -lt $deadline)
@@ -86,14 +59,11 @@ do {
 # Attempt to retrieve container logs via the console log stream
 try {
   $logStreamPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.App/jobs/$ContainerAppJobName/executions/${executionName}?api-version=$apiVersion"
-  $logResponse = Invoke-AzRestMethod -Method GET -Path $logStreamPath
-  if ($logResponse.StatusCode -eq 200) {
-    $logPayload = $logResponse.Content | ConvertFrom-Json
-    if ($logPayload.properties.template -and $logPayload.properties.template.containers) {
-      $containerStatus = $logPayload.properties.template.containers[0]
-      if ($containerStatus) {
-        Write-Host "Container details retrieved for execution '$executionName'."
-      }
+  $logPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$logStreamPath" -Headers $armHeaders -ErrorAction SilentlyContinue
+  if ($logPayload -and $logPayload.properties.template -and $logPayload.properties.template.containers) {
+    $containerStatus = $logPayload.properties.template.containers[0]
+    if ($containerStatus) {
+      Write-Host "Container details retrieved for execution '$executionName'."
     }
   }
 }
@@ -103,16 +73,9 @@ catch {
 
 if ($status -ne 'Succeeded') {
   # Try to get more details about the failure
-  $detailResponse = Invoke-AzRestMethod -Method GET -Path "$basePath/executions/${executionName}?api-version=$apiVersion"
-  if ($detailResponse.StatusCode -eq 200) {
-    $detailPayload = $detailResponse.Content | ConvertFrom-Json
-    $failureMessage = $null
-    if ($detailPayload.properties -and $detailPayload.properties.PSObject.Properties.Match('status').Count -gt 0) {
-      $failureMessage = "Final status: $($detailPayload.properties.status)"
-    }
-    if ($failureMessage) {
-      throw "Container App Job execution did not succeed. $failureMessage"
-    }
+  $detailPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$basePath/executions/${executionName}?api-version=$apiVersion" -Headers $armHeaders -ErrorAction SilentlyContinue
+  if ($detailPayload -and $detailPayload.properties -and $detailPayload.properties.PSObject.Properties.Match('status').Count -gt 0) {
+    throw "Container App Job execution did not succeed. Final status: $($detailPayload.properties.status)"
   }
   throw "Container App Job execution did not succeed. Final status: $status"
 }

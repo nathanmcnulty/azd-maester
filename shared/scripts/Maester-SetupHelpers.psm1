@@ -485,17 +485,22 @@ function Test-AzureReaderRoleAssignment {
     "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/$readerRoleGuid"
   }
 
+  $armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+  $armHeaders = @{ Authorization = "Bearer $armToken" }
+
   # Pre-check: look for an existing Reader assignment for this principal at this scope
   $existingPath = "$Scope/providers/Microsoft.Authorization/roleAssignments?`$filter=principalId eq '$PrincipalObjectId' and atScope()&api-version=2022-04-01"
-  $existingResponse = Invoke-AzRestMethod -Method GET -Path $existingPath
-  if ($existingResponse.StatusCode -eq 200) {
-    $existingPayload = $existingResponse.Content | ConvertFrom-Json
+  try {
+    $existingPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$existingPath" -Headers $armHeaders
     $existingMatch = @($existingPayload.value | Where-Object {
         $_.properties.roleDefinitionId -like "*$readerRoleGuid"
       }) | Select-Object -First 1
     if ($existingMatch) {
       return $null
     }
+  }
+  catch {
+    # Pre-check failed, proceed to try the PUT anyway
   }
 
   $assignmentName = [guid]::NewGuid().ToString()
@@ -506,23 +511,27 @@ function Test-AzureReaderRoleAssignment {
       principalId      = $PrincipalObjectId
       principalType    = 'ServicePrincipal'
     }
-  } | ConvertTo-Json -Depth 10
+  } | ConvertTo-Json -Depth 10 -Compress
 
-  $response = Invoke-AzRestMethod -Method PUT -Path $path -Payload $body
-  if ($response.StatusCode -in @(200, 201)) {
-    $payload = $response.Content | ConvertFrom-Json
-    if ($payload -and $payload.id) {
-      return $payload.id
+  try {
+    $response = Invoke-RestMethod -Method PUT -Uri "https://management.azure.com$path" -Headers $armHeaders -Body $body -ContentType 'application/json' -SkipHttpErrorCheck -StatusCodeVariable putStatus
+    if ($putStatus -in @(200, 201)) {
+      if ($response -and $response.id) {
+        return $response.id
+      }
+      return $null
     }
-    return $null
+    # 409 Conflict means the assignment already exists (race condition with pre-check)
+    if ($putStatus -eq 409) {
+      return $null
+    }
+    # Any other non-success status is a real error
+    throw "Azure RBAC Reader assignment failed at scope '$Scope'. HTTP $putStatus"
   }
-
-  # 409 Conflict means the assignment already exists (race condition with pre-check)
-  if ($response.StatusCode -eq 409) {
-    return $null
+  catch {
+    if ($_.Exception.Message -match 'RoleAssignmentExists|Conflict' -or ($putStatus -and $putStatus -eq 409)) {
+      return $null
+    }
+    throw "Azure RBAC Reader assignment failed at scope '$Scope': $($_.Exception.Message)"
   }
-
-  # Any other non-success status is a real error
-  $errorContent = $response.Content
-  throw "Azure RBAC Reader assignment failed at scope '$Scope'. HTTP $($response.StatusCode): $errorContent"
 }

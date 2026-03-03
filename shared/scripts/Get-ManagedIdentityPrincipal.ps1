@@ -21,15 +21,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module Az.Accounts -Force
-
 $resourceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/$ProviderNamespace/$ResourceType/$ResourceName"
-$response = Invoke-AzRestMethod -Method GET -Path "${resourceId}?api-version=$ApiVersion"
-if ($response.StatusCode -lt 200 -or $response.StatusCode -gt 299) {
-  throw "Failed to read resource '$resourceId'. Status: $($response.StatusCode)"
+$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$payload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com${resourceId}?api-version=$ApiVersion" -Headers @{ Authorization = "Bearer $armToken" }
+if (-not $payload) {
+  throw "Failed to read resource '$resourceId'."
 }
-
-$payload = $response.Content | ConvertFrom-Json
 if (-not $payload.identity.principalId) {
   throw "Resource '$resourceId' does not expose a system-assigned identity principalId."
 }

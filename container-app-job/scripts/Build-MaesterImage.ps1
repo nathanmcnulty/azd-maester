@@ -71,14 +71,15 @@ Write-Host "Image built and pushed: $imageFqdn"
 $preferredJobName = "caj-maester-$($EnvironmentName.ToLower())"
 Write-Host "Updating Container App Job '$preferredJobName' to use image '$imageFqdn'..."
 
-Import-Module Az.Accounts -Force
 $jobPath = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.App/jobs/${preferredJobName}?api-version=2024-03-01"
-$jobResponse = Invoke-AzRestMethod -Method GET -Path $jobPath
-if ($jobResponse.StatusCode -ne 200) {
-  throw "Failed to read Container App Job '$preferredJobName'. HTTP $($jobResponse.StatusCode)"
+$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armHeaders = @{ Authorization = "Bearer $armToken" }
+try {
+  $jobPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$jobPath" -Headers $armHeaders
 }
-
-$jobPayload = $jobResponse.Content | ConvertFrom-Json
+catch {
+  throw "Failed to read Container App Job '$preferredJobName': $($_.Exception.Message)"
+}
 $jobPayload.properties.template.containers[0].image = $imageFqdn
 
 # Configure ACR registry on the job (not done during Bicep to avoid circular dependency)
@@ -100,11 +101,13 @@ $updateBody = @{
   tags       = $jobPayload.tags
   identity   = $jobPayload.identity
   properties = $jobPayload.properties
-} | ConvertTo-Json -Depth 30
+} | ConvertTo-Json -Depth 30 -Compress
 
-$updateResponse = Invoke-AzRestMethod -Method PUT -Path $jobPath -Payload $updateBody
-if ($updateResponse.StatusCode -lt 200 -or $updateResponse.StatusCode -gt 299) {
-  throw "Failed to update Container App Job image. HTTP $($updateResponse.StatusCode): $($updateResponse.Content)"
+try {
+  Invoke-RestMethod -Method PUT -Uri "https://management.azure.com$jobPath" -Headers $armHeaders -Body $updateBody -ContentType 'application/json' | Out-Null
+}
+catch {
+  throw "Failed to update Container App Job image: $($_.Exception.Message)"
 }
 
 Write-Host "Container App Job '$preferredJobName' updated to image '$imageFqdn'."

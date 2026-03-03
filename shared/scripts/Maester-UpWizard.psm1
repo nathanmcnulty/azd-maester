@@ -485,11 +485,9 @@ function Invoke-MaesterUpWizard {
         $existingRepoFound = $false
         try {
           $projectEncoded = [System.Uri]::EscapeDataString($project)
-          $reposResponse = Invoke-AzRestMethod -Method GET `
-            -Uri "https://dev.azure.com/$organization/$projectEncoded/_apis/git/repositories?api-version=7.1-preview.1" `
-            -ResourceId '499b84ac-1321-427f-aa17-267ca6975798'
-          if ($reposResponse.StatusCode -eq 200) {
-            $reposPayload = $reposResponse.Content | ConvertFrom-Json
+          $adoToken = az account get-access-token --resource '499b84ac-1321-427f-aa17-267ca6975798' --query accessToken -o tsv 2>$null
+          $reposPayload = Invoke-RestMethod -Method GET -Uri "https://dev.azure.com/$organization/$projectEncoded/_apis/git/repositories?api-version=7.1-preview.1" -Headers @{ Authorization = "Bearer $adoToken" }
+          if ($reposPayload) {
             $existingRepoFound = @($reposPayload.value | Where-Object { $_.name -ieq $repositoryName }).Count -gt 0
           }
         }

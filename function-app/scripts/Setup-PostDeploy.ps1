@@ -45,7 +45,6 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
 
-Import-Module Az.Accounts -Force
 Import-Module Microsoft.Graph.Authentication -Force
 Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-SetupHelpers.psm1') -Force
 
@@ -65,29 +64,13 @@ if (-not $TenantId -and $env:AZURE_TENANT_ID) {
   $TenantId = $env:AZURE_TENANT_ID
 }
 
-$existingContext = Get-AzContext -ErrorAction SilentlyContinue
-$requiresLogin = $true
-if ($existingContext -and $existingContext.Subscription -and $existingContext.Subscription.Id -eq $SubscriptionId) {
-  if (-not $TenantId -or ($existingContext.Tenant -and $existingContext.Tenant.Id -eq $TenantId)) {
-    $requiresLogin = $false
-  }
-}
-
-if ($requiresLogin) {
-  $connectParameters = @{ Subscription = $SubscriptionId }
-  if ($TenantId) {
-    $connectParameters['Tenant'] = $TenantId
-  }
-  Connect-AzAccount @connectParameters | Out-Null
-}
-
-$context = Get-AzContext
-if (-not $SubscriptionId) {
-  $SubscriptionId = $context.Subscription.Id
-}
-if (-not $TenantId -and $context.Tenant) {
-  $TenantId = $context.Tenant.Id
-}
+if ($SubscriptionId) { az account set --subscription $SubscriptionId 2>$null | Out-Null }
+$azAccount = az account show 2>$null | ConvertFrom-Json
+if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
+if (-not $SubscriptionId) { $SubscriptionId = $azAccount.id }
+if (-not $TenantId) { $TenantId = $azAccount.tenantId }
+$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armHeaders = @{ Authorization = "Bearer $armToken" }
 if (-not $EnvironmentName) {
   $EnvironmentName = if ($env:AZURE_ENV_NAME) { $env:AZURE_ENV_NAME } else { 'dev' }
 }
@@ -166,8 +149,7 @@ $resolvedResourceGroupName = if ($ResourceGroupName) { $ResourceGroupName } else
 # ──────────────────────────────────────────────
 
 $storageQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Storage/storageAccounts?api-version=2023-05-01"
-$storageResponse = Invoke-AzRestMethod -Method GET -Path $storageQuery
-$storagePayload = $storageResponse.Content | ConvertFrom-Json
+$storagePayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$storageQuery" -Headers $armHeaders
 if (-not $storagePayload.value -or $storagePayload.value.Count -eq 0) {
   throw "No Storage Account resources were found in resource group '$resolvedResourceGroupName'."
 }
@@ -200,8 +182,7 @@ catch {
 
 if ($signedInUser -and $signedInUser.id) {
   $existingReaderAssignmentsPath = "$($storageAccount.id)/providers/Microsoft.Authorization/roleAssignments?`$filter=atScope()&api-version=2022-04-01"
-  $existingReaderAssignmentsResponse = Invoke-AzRestMethod -Method GET -Path $existingReaderAssignmentsPath
-  $existingReaderAssignments = ($existingReaderAssignmentsResponse.Content | ConvertFrom-Json).value
+  $existingReaderAssignments = (Invoke-RestMethod -Method GET -Uri "https://management.azure.com$existingReaderAssignmentsPath" -Headers $armHeaders).value
   $existingReaderAssignment = @($existingReaderAssignments | Where-Object {
       $_.properties.principalId -eq $signedInUser.id -and $_.properties.roleDefinitionId -eq $storageBlobDataReaderRoleId
     }) | Select-Object -First 1
@@ -216,9 +197,9 @@ if ($signedInUser -and $signedInUser.id) {
         principalId = $signedInUser.id
         principalType = 'User'
       }
-    } | ConvertTo-Json -Depth 10
+    } | ConvertTo-Json -Depth 10 -Compress
 
-    Invoke-AzRestMethod -Method PUT -Path $readerAssignmentPath -Payload $readerAssignmentBody | Out-Null
+    Invoke-RestMethod -Method PUT -Uri "https://management.azure.com$readerAssignmentPath" -Headers $armHeaders -Body $readerAssignmentBody -ContentType 'application/json' | Out-Null
     Write-Host "Granted Storage Blob Data Reader on '$($storageAccount.name)' to signed-in user '$userLabel'."
   }
   else {
@@ -234,8 +215,7 @@ else {
 # ──────────────────────────────────────────────
 
 $sitesQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Web/sites?api-version=2023-12-01"
-$sitesResponse = Invoke-AzRestMethod -Method GET -Path $sitesQuery
-$sitesPayload = $sitesResponse.Content | ConvertFrom-Json
+$sitesPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$sitesQuery" -Headers $armHeaders
 if (-not $sitesPayload.value -or $sitesPayload.value.Count -eq 0) {
   throw "No Web App / Function App resources were found in resource group '$resolvedResourceGroupName'."
 }
@@ -494,8 +474,7 @@ if ($IncludeTeams) {
 # ──────────────────────────────────────────────
 
 $webAppsQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Web/sites?api-version=2023-12-01"
-$webAppsResponse = Invoke-AzRestMethod -Method GET -Path $webAppsQuery
-$webAppsPayload = $webAppsResponse.Content | ConvertFrom-Json
+$webAppsPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$webAppsQuery" -Headers $armHeaders
 
 $webAppSites = @($webAppsPayload.value | Where-Object { $_.kind -notlike '*functionapp*' })
 
@@ -721,10 +700,10 @@ if ($webAppSites.Count -gt 0) {
         routes = @{}
       }
     }
-  } | ConvertTo-Json -Depth 15
+  } | ConvertTo-Json -Depth 15 -Compress
 
   $authPath = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Web/sites/$webAppName/config/authsettingsV2?api-version=2023-12-01"
-  Invoke-AzRestMethod -Method PUT -Path $authPath -Payload $authPayload | Out-Null
+  Invoke-RestMethod -Method PUT -Uri "https://management.azure.com$authPath" -Headers $armHeaders -Body $authPayload -ContentType 'application/json' | Out-Null
 
   Write-Host "Configured Easy Auth for Web App '$webAppName'."
   Write-Host "Easy Auth Entra app display name: $easyAuthDisplayName"
