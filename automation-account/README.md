@@ -86,7 +86,6 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 - azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
 - Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-RunbookValidation.ps1`
 - Automation runbook payload script (published into Automation): `scripts/Invoke-MaesterAutomationRunbook.ps1`
-- Optional utility: `scripts/Test-AzdDeployment.ps1`
 
 ## Runtime behavior
 
