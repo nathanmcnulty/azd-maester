@@ -4,10 +4,10 @@ Production-style `azd` templates for running Maester on Azure with Managed Ident
 
 ## Solutions
 
-- [automation-account](automation-account\README.md): End-to-end scheduled Maester solution (recommended)
-- [container-app-job](container-app-job\README.md): Scheduled Maester execution using Azure Container Apps Jobs
-- [function-app](function-app\README.md): Maester execution using a PowerShell Azure Function App
-- [azure-devops](azure-devops\README.md): End-to-end Azure DevOps pipeline automation with workload identity federation
+- [automation-account](automation-account/README.md): End-to-end scheduled Maester solution (recommended)
+- [container-app-job](container-app-job/README.md): Scheduled Maester execution using Azure Container Apps Jobs
+- [function-app](function-app/README.md): Maester execution using a PowerShell Azure Function App
+- [azure-devops](azure-devops/README.md): End-to-end Azure DevOps pipeline automation with workload identity federation
 
 ## Recommended starting point
 
@@ -17,16 +17,16 @@ Use `automation-account` first. It has the simplest setup and serves as the refe
 
 After `azd init -t <your-template-id>`, choose a folder:
 
-- ### [automation-account](automation-account\README.md)
+- ### [automation-account](automation-account/README.md)
   - `cd automation-account`
   - `azd up`
-- ### [container-app-job](container-app-job\README.md)
+- ### [container-app-job](container-app-job/README.md)
   - `cd container-app-job`
   - `azd up`
-- ### [function-app](function-app\README.md)
+- ### [function-app](function-app/README.md)
   - `cd function-app`
   - `azd up`
-- ### [azure-devops](azure-devops\README.md)
+- ### [azure-devops](azure-devops/README.md)
   - `cd azure-devops`
   - `azd up`
 
