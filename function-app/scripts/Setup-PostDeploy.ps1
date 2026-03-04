@@ -45,7 +45,6 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
 
-Import-Module Microsoft.Graph.Authentication -Force
 Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-SetupHelpers.psm1') -Force
 
 
@@ -717,3 +716,4 @@ if ($webAppSites.Count -gt 0) {
   Write-Host "Easy Auth admin consent scopes: $consentScope"
   Write-Host "Easy Auth security group: $SecurityGroupObjectId (source: $securityGroupSource)"
 }
+

@@ -55,7 +55,7 @@ Non-interactive note (`--no-prompt`): if `AZURE_RESOURCE_GROUP` is set, `preup` 
 - `predown` cleanup before resource deletion
 - Managed Identities by default, no secrets or certificates
 - PowerShell setup scripts use:
-  - `Microsoft.Graph.Authentication` + `Invoke-MgGraphRequest` for Graph API (will move to native REST API to remove this dependency in the future)
+  - Azure CLI access tokens + `Invoke-RestMethod` for Microsoft Graph API
 
 ## Reference docs
 

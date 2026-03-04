@@ -61,29 +61,10 @@ if (-not $PSBoundParameters.ContainsKey('AppRoleValues')) {
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module Microsoft.Graph.Authentication -Force
+Import-Module (Join-Path $PSScriptRoot 'Maester-SetupHelpers.psm1') -Force
+Assert-GraphAccess -TenantId $TenantId -Scopes 'Application.Read.All','AppRoleAssignment.ReadWrite.All','Directory.Read.All','Directory.AccessAsUser.All'
 
-$graphToken = $null
-try {
-  $tokenJson = az account get-access-token --resource https://graph.microsoft.com -o json 2>$null
-  if ($LASTEXITCODE -eq 0 -and $tokenJson) {
-    $tokenData = $tokenJson | ConvertFrom-Json
-    $graphToken = $tokenData.accessToken
-  }
-}
-catch {
-  Write-Verbose "az cli token acquisition failed for Graph: $($_.Exception.Message)"
-}
-
-if ($graphToken) {
-  $secureToken = ConvertTo-SecureString $graphToken -AsPlainText -Force
-  Connect-MgGraph -AccessToken $secureToken -NoWelcome
-}
-else {
-  Connect-MgGraph -TenantId $TenantId -Scopes 'Application.Read.All','AppRoleAssignment.ReadWrite.All','Directory.Read.All','Directory.AccessAsUser.All' -NoWelcome
-}
-
-$graphServicePrincipal = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '00000003-0000-0000-c000-000000000000'"
+$graphServicePrincipal = Invoke-GraphRestRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '00000003-0000-0000-c000-000000000000'"
 if (-not $graphServicePrincipal.value -or $graphServicePrincipal.value.Count -eq 0) {
   throw 'Microsoft Graph service principal was not found in this tenant.'
 }
@@ -91,7 +72,7 @@ if (-not $graphServicePrincipal.value -or $graphServicePrincipal.value.Count -eq
 $resourceServicePrincipal = $graphServicePrincipal.value[0]
 $appRoles = @($resourceServicePrincipal.appRoles | Where-Object { $_.value -and $_.allowedMemberTypes -contains 'Application' })
 
-$existingAssignments = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments?`$top=999"
+$existingAssignments = Invoke-GraphRestRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments?`$top=999"
 $existingAssignmentList = @($existingAssignments.value)
 
 foreach ($appRoleValue in $AppRoleValues) {
@@ -112,7 +93,7 @@ foreach ($appRoleValue in $AppRoleValues) {
     appRoleId   = $match.id
   } | ConvertTo-Json
 
-  Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments" -Body $body -ContentType 'application/json'
+  Invoke-GraphRestRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments" -Body $body -ContentType 'application/json'
   Write-Host "Assigned app role '$appRoleValue'."
 }
 

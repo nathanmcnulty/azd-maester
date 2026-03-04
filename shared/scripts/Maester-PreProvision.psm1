@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 Import-Module (Join-Path $PSScriptRoot 'Maester-UpWizard.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Maester-SetupHelpers.psm1') -Force
 
 function Get-SemanticVersion {
   param([Parameter(Mandatory = $true)][string]$VersionText)
@@ -90,17 +91,10 @@ function Invoke-MaesterPreProvision {
   }
 
   if ($RequireGraphProbe) {
-    $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($graphToken)) { throw "Microsoft Graph access check failed during preprovision. Re-run: azd auth login" }
-    try {
-      Invoke-RestMethod -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=id&$top=1' -Headers @{ Authorization = "Bearer $graphToken" } | Out-Null
-    } catch {
-      throw "Microsoft Graph access check failed during preprovision: $($_.Exception.Message). Re-run: azd auth login"
-    }
+    Assert-GraphAccess -TenantId $TenantId -Scopes 'Directory.Read.All'
   }
   else {
-    Import-Module Microsoft.Graph.Authentication -Force
-    Connect-MgGraph -TenantId $TenantId -Scopes 'Directory.Read.All' -NoWelcome | Out-Null
+    Assert-GraphAccess -TenantId $TenantId -Scopes 'Directory.Read.All'
   }
 
   Invoke-MaesterUpWizard `

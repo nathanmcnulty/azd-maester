@@ -80,6 +80,20 @@ function Resolve-StepFailureAction {
 
   Write-Warning ("{0} failed: {1}" -f $StepName, $Message)
 
+  $failureActionOverride = $env:MAESTER_STEP_FAILURE_ACTION
+  if (-not [string]::IsNullOrWhiteSpace($failureActionOverride)) {
+    switch ($failureActionOverride.Trim().ToLowerInvariant()) {
+      'stop' {
+        Write-Warning "MAESTER_STEP_FAILURE_ACTION=Stop. Failing setup on '$StepName'."
+        return 'Stop'
+      }
+      'skip' {
+        Write-Warning "MAESTER_STEP_FAILURE_ACTION=Skip. Skipping '$StepName'."
+        return 'Skip'
+      }
+    }
+  }
+
   if (-not (Test-CanPrompt)) {
     Write-Warning "Non-interactive session detected. Skipping $StepName and continuing."
     return 'Skip'
@@ -136,11 +150,18 @@ function Set-AzdEnvJsonArray {
 function Get-AzCliAccessToken {
   param(
     [Parameter(Mandatory = $true)]
-    [string]$Resource
+    [string]$Resource,
+    [Parameter(Mandatory = $false)]
+    [string]$TenantId
   )
 
   try {
-    $tokenJson = az account get-access-token --resource $Resource -o json 2>$null
+    $tokenArgs = @('account', 'get-access-token', '--resource', $Resource, '-o', 'json')
+    if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+      $tokenArgs += @('--tenant', $TenantId)
+    }
+
+    $tokenJson = (& az @tokenArgs 2>$null)
     if ($LASTEXITCODE -eq 0 -and $tokenJson) {
       $tokenData = $tokenJson | ConvertFrom-Json
       if ($tokenData.accessToken) {
@@ -155,6 +176,126 @@ function Get-AzCliAccessToken {
   return $null
 }
 
+function Get-GraphAccessToken {
+  param(
+    [Parameter(Mandatory = $false)]
+    [string]$TenantId,
+    [Parameter(Mandatory = $false)]
+    [string[]]$Scopes = @(),
+    [Parameter(Mandatory = $false)]
+    [bool]$AllowInteractiveLogin = $true
+  )
+
+  $token = Get-AzCliAccessToken -Resource 'https://graph.microsoft.com' -TenantId $TenantId
+  if ($token) {
+    return $token
+  }
+
+  if ($AllowInteractiveLogin) {
+    Confirm-AzureLogin
+    $token = Get-AzCliAccessToken -Resource 'https://graph.microsoft.com' -TenantId $TenantId
+    if ($token) {
+      return $token
+    }
+  }
+
+  $scopeText = if ($Scopes -and $Scopes.Count -gt 0) { $Scopes -join ', ' } else { 'default Graph scopes' }
+  throw "Microsoft Graph token acquisition failed (requested: $scopeText). Ensure Azure login is active and has Graph permissions."
+}
+
+function Invoke-GraphRestRequest {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('GET', 'POST', 'PUT', 'PATCH', 'DELETE')]
+    [string]$Method,
+    [Parameter(Mandatory = $true)]
+    [string]$Uri,
+    [Parameter(Mandatory = $false)]
+    $Body,
+    [Parameter(Mandatory = $false)]
+    [string]$ContentType = 'application/json',
+    [Parameter(Mandatory = $false)]
+    [string]$TenantId
+  )
+
+  $token = Get-GraphAccessToken -TenantId $TenantId
+  $headers = @{
+    Authorization = "Bearer $token"
+  }
+
+  $invokeParams = @{
+    Method  = $Method
+    Uri     = $Uri
+    Headers = $headers
+  }
+
+  if ($PSBoundParameters.ContainsKey('Body') -and $null -ne $Body) {
+    $payload = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 20 }
+    $invokeParams['Body'] = $payload
+    $invokeParams['ContentType'] = $ContentType
+  }
+
+  $responseStatus = 0
+  $response = Invoke-RestMethod @invokeParams -SkipHttpErrorCheck -StatusCodeVariable responseStatus
+
+  if ($responseStatus -ge 400) {
+    $errorMessage = $null
+    if ($response -and $response.error -and $response.error.message) {
+      $errorMessage = [string]$response.error.message
+    }
+    elseif ($response -is [string] -and -not [string]::IsNullOrWhiteSpace($response)) {
+      $errorMessage = $response
+    }
+
+    if ([string]::IsNullOrWhiteSpace($errorMessage)) {
+      $errorMessage = 'No response content.'
+    }
+
+    throw "Microsoft Graph request failed. HTTP ${responseStatus}: $errorMessage"
+  }
+
+  return $response
+}
+
+function Assert-GraphAccess {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$TenantId,
+    [Parameter(Mandatory = $false)]
+    [string[]]$Scopes = @()
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+    $script:MaesterGraphTenantId = $TenantId
+  }
+
+  try {
+    Invoke-GraphRestRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=id&$top=1' -TenantId $script:MaesterGraphTenantId | Out-Null
+  }
+  catch {
+    $scopeText = if ($Scopes -and $Scopes.Count -gt 0) { $Scopes -join ', ' } else { 'default Graph scopes' }
+    throw "Microsoft Graph access check failed for tenant '$TenantId' (requested: $scopeText). Ensure Azure login is active and has Graph permissions. Error: $($_.Exception.Message)"
+  }
+}
+
+function global:Invoke-MgGraphRequest {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('GET', 'POST', 'PUT', 'PATCH', 'DELETE')]
+    [string]$Method,
+    [Parameter(Mandatory = $true)]
+    [string]$Uri,
+    [Parameter(Mandatory = $false)]
+    $Body,
+    [Parameter(Mandatory = $false)]
+    [string]$ContentType = 'application/json'
+  )
+
+  return Invoke-GraphRestRequest -Method $Method -Uri $Uri -Body $Body -ContentType $ContentType -TenantId $script:MaesterGraphTenantId
+}
+
 function Connect-MgGraphSilent {
   param(
     [Parameter(Mandatory = $true)]
@@ -163,20 +304,7 @@ function Connect-MgGraphSilent {
     [string[]]$Scopes = @()
   )
 
-  $token = Get-AzCliAccessToken -Resource 'https://graph.microsoft.com'
-  if ($token) {
-    $secureToken = ConvertTo-SecureString $token -AsPlainText -Force
-    Connect-MgGraph -AccessToken $secureToken -NoWelcome | Out-Null
-    return
-  }
-
-  Write-Verbose 'az cli token not available for Microsoft Graph. Falling back to interactive auth.'
-  if ($Scopes.Count -gt 0) {
-    Connect-MgGraph -TenantId $TenantId -Scopes $Scopes -NoWelcome | Out-Null
-  }
-  else {
-    Connect-MgGraph -TenantId $TenantId -Scopes 'User.Read' -NoWelcome | Out-Null
-  }
+  Assert-GraphAccess -TenantId $TenantId -Scopes $Scopes
 }
 
 function Connect-ExchangeOnlineSilent {

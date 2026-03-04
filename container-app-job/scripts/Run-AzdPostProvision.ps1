@@ -25,6 +25,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-SetupHelpers.psm1') -Force
 
 function Get-EnvValue {
   param(
@@ -177,7 +178,6 @@ if ($needsReplicationWait) {
   # Retrieve the managed identity principal ID from azd env
   $miPrincipalId = Get-EnvValue -Lines $envValues -Name 'CONTAINER_JOB_MI_PRINCIPAL_ID'
   if ($miPrincipalId) {
-    Import-Module Microsoft.Graph.Authentication -Force -ErrorAction SilentlyContinue
     $pollInterval = 15
     $maxWaitSeconds = 180
     $elapsed = 0
@@ -185,7 +185,7 @@ if ($needsReplicationWait) {
     Write-Host "Polling Graph API to verify Exchange/Teams permission assignments (up to ${maxWaitSeconds}s)..."
     while ($elapsed -lt $maxWaitSeconds) {
       try {
-        $assignments = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$miPrincipalId/appRoleAssignments" -ErrorAction Stop
+        $assignments = Invoke-GraphRestRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$miPrincipalId/appRoleAssignments" -TenantId $TenantId
         $assignedRoles = @($assignments.value | ForEach-Object { $_.appRoleId })
         # Exchange.ManageAsApp role ID: dc50a0fb-09a3-484d-be87-e023b12c6440
         $exoReady = ($exchangeSetupStatusFromEnv -ne 'configured') -or ($assignedRoles -contains 'dc50a0fb-09a3-484d-be87-e023b12c6440')

@@ -314,71 +314,6 @@ function Set-AdoRepositoryAuthorizedForPipelines {
   Invoke-AzRestMethod -Method PATCH -Uri $permissionsUri -ResourceId $adoResourceId -Payload $patchBody | Out-Null
 }
 
-function global:Invoke-MgGraphRequest {
-  [CmdletBinding()]
-  param(
-    [Parameter(Mandatory = $true)]
-    [ValidateSet('GET', 'POST', 'PUT', 'PATCH', 'DELETE')]
-    [string]$Method,
-
-    [Parameter(Mandatory = $true)]
-    [string]$Uri,
-
-    [Parameter(Mandatory = $false)]
-    $Body,
-
-    [Parameter(Mandatory = $false)]
-    [string]$ContentType = 'application/json'
-  )
-
-  $invokeParams = @{
-    Method = $Method
-    Uri    = $Uri
-  }
-
-  if ($PSBoundParameters.ContainsKey('Body') -and $null -ne $Body) {
-    if ($Body -is [string]) {
-      $invokeParams['Payload'] = $Body
-    }
-    else {
-      $invokeParams['Payload'] = ($Body | ConvertTo-Json -Depth 20)
-    }
-  }
-
-  $response = Invoke-AzRestMethod @invokeParams
-  if (-not $response) {
-    return $null
-  }
-
-  if ($response.StatusCode -ge 400) {
-    throw "Microsoft Graph request failed. HTTP $($response.StatusCode): $($response.Content)"
-  }
-
-  if ([string]::IsNullOrWhiteSpace($response.Content)) {
-    return $null
-  }
-
-  return ($response.Content | ConvertFrom-Json)
-}
-
-function Invoke-GraphAuthProbe {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$TenantId,
-    [Parameter(Mandatory = $false)]
-    [string[]]$Scopes = @()
-  )
-
-  # Compatibility no-op: Graph calls use Invoke-AzRestMethod through Invoke-MgGraphRequest.
-  try {
-    Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=id&$top=1' | Out-Null
-  }
-  catch {
-    $scopeText = if ($Scopes -and $Scopes.Count -gt 0) { $Scopes -join ', ' } else { 'default Graph scopes' }
-    throw "Microsoft Graph access check failed for tenant '$TenantId' (requested: $scopeText). Ensure Azure login is active and has Graph permissions. Error: $($_.Exception.Message)"
-  }
-}
-
 function Test-AzureRoleAssignment {
   param(
     [Parameter(Mandatory = $true)]
@@ -1140,7 +1075,7 @@ if ($IncludeExchange -or $IncludeTeams) {
       'Directory.AccessAsUser.All',
       'RoleManagement.ReadWrite.Directory'
     )
-    Invoke-GraphAuthProbe -TenantId $TenantId -Scopes $scopes
+    Assert-GraphAccess -TenantId $TenantId -Scopes $scopes
   }
   catch {
     $action = Resolve-StepFailureAction -StepName 'Microsoft Graph connection for advanced setup' -Message $_.Exception.Message
@@ -1377,7 +1312,7 @@ if ($includeWebApp) {
   }
 
   if (-not $SecurityGroupObjectId -and -not [string]::IsNullOrWhiteSpace($SecurityGroupDisplayName)) {
-    Invoke-GraphAuthProbe -TenantId $TenantId -Scopes 'Group.Read.All','Directory.Read.All'
+    Assert-GraphAccess -TenantId $TenantId -Scopes 'Group.Read.All','Directory.Read.All'
 
     $escapedDisplayName = [System.Uri]::EscapeDataString("'$SecurityGroupDisplayName'")
     $groupsResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq $escapedDisplayName&`$select=id,displayName,description&`$top=25"
@@ -1400,7 +1335,7 @@ if ($includeWebApp) {
     throw 'SecurityGroupObjectId is required to configure Easy Auth when includeWebApp=true. Provide -SecurityGroupObjectId, set SECURITY_GROUP_OBJECT_ID, or set EASY_AUTH_SECURITY_GROUP_OBJECT_ID.'
   }
 
-  Invoke-GraphAuthProbe -TenantId $TenantId -Scopes 'Application.ReadWrite.All','Directory.Read.All','DelegatedPermissionGrant.ReadWrite.All'
+  Assert-GraphAccess -TenantId $TenantId -Scopes 'Application.ReadWrite.All','Directory.Read.All','DelegatedPermissionGrant.ReadWrite.All'
 
   $webAppName = $webAppResource.name
   $webAppHostName = $null
@@ -1778,6 +1713,7 @@ $summaryLines += "- Validation completed at: $($validationResult.CompletedAt)"
 
 Set-Content -Path $summaryPath -Value ($summaryLines -join [Environment]::NewLine) -Encoding utf8
 Write-Host "Deployment summary written to: $summaryPath"
+
 
 
 
