@@ -1213,8 +1213,8 @@ if ($IncludeExchange -and $exchangeSetupStatus -eq 'pending') {
 if ($IncludeTeams -and $teamsSetupStatus -eq 'pending') {
   try {
     $teamsRoleCandidates = @(
-      'Teams Administrator',
-      'Teams Reader'
+      'Teams Reader',
+      'Teams Administrator'
     )
 
     $teamsRoleConfigured = $false
