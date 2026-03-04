@@ -2,6 +2,8 @@
 
 Production-style `azd` templates for running Maester on Azure with Managed Identities and minimal operator steps.
 
+https://github.com/user-attachments/assets/c2781a8e-46f6-4be0-8bf2-27f3b6425748
+
 ## Solutions
 
 - [automation-account](automation-account/README.md): End-to-end scheduled Maester solution (recommended)
