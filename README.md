@@ -17,7 +17,7 @@ Use `automation-account` first. It has the simplest setup and serves as the refe
 
 ## Quickstart by solution
 
-After `azd init -t <your-template-id>`, choose a folder:
+After `azd init -t nathanmcnulty/azd-maester`, cd into the folder for your preferred solution and run `azd up`:
 
 - ### [automation-account](automation-account/README.md)
   - `cd automation-account`
