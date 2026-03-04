@@ -159,61 +159,6 @@ function Get-OptionalPropertyValue {
 
   return $null
 }
-
-
-function Get-FirstAuthorizedResourceMatch {
-  param(
-    [Parameter(Mandatory = $false)]
-    $AuthorizedResourcesResponse,
-
-    [Parameter(Mandatory = $true)]
-    [string]$ResourceType,
-
-    [Parameter(Mandatory = $true)]
-    [string]$ResourceId
-  )
-
-  if ($null -eq $AuthorizedResourcesResponse) {
-    return $null
-  }
-
-  $candidateItems = @()
-  $responseValue = Get-OptionalPropertyValue -InputObject $AuthorizedResourcesResponse -PropertyNames @('value')
-  if ($responseValue) {
-    $candidateItems = @($responseValue)
-  }
-  else {
-    $candidateItems = @($AuthorizedResourcesResponse)
-  }
-
-  if ($candidateItems.Count -eq 0) {
-    return $null
-  }
-
-  return @($candidateItems | Where-Object {
-      ([string](Get-OptionalPropertyValue -InputObject $_ -PropertyNames @('type')) -ieq $ResourceType) -and
-      ([string](Get-OptionalPropertyValue -InputObject $_ -PropertyNames @('id')) -eq $ResourceId)
-    }) | Select-Object -First 1
-}
-
-function Test-IsAuthorizedResource {
-  param(
-    [Parameter(Mandatory = $false)]
-    $ResourceEntry
-  )
-
-  if ($null -eq $ResourceEntry) {
-    return $false
-  }
-
-  $authorizedValue = Get-OptionalPropertyValue -InputObject $ResourceEntry -PropertyNames @('authorized')
-  if ($authorizedValue -is [bool]) {
-    return $authorizedValue
-  }
-
-  return ConvertTo-BoolOrDefault -Value ([string]$authorizedValue) -Default $false
-}
-
 function Test-AdoServiceConnectionAuthorizedForPipelines {
   param(
     [Parameter(Mandatory = $true)]

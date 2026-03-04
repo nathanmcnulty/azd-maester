@@ -18,6 +18,4 @@ Invoke-MaesterPreProvision `
   -TenantId $TenantId `
   -Location $env:AZURE_LOCATION `
   -RequireGit `
-  -RequireAdopsModule `
-  -RequireAdoToken `
-  -RequireGraphProbe
+  -RequireAdopsModule

@@ -37,13 +37,7 @@ function Invoke-MaesterPreProvision {
     [switch]$RequireGit,
 
     [Parameter(Mandatory = $false)]
-    [switch]$RequireAdopsModule,
-
-    [Parameter(Mandatory = $false)]
-    [switch]$RequireAdoToken,
-
-    [Parameter(Mandatory = $false)]
-    [switch]$RequireGraphProbe
+    [switch]$RequireAdopsModule
   )
 
   if (-not $SubscriptionId) {
@@ -90,12 +84,7 @@ function Invoke-MaesterPreProvision {
     throw 'AZURE_TENANT_ID could not be resolved during preprovision.'
   }
 
-  if ($RequireGraphProbe) {
-    Assert-GraphAccess -TenantId $TenantId -Scopes 'Directory.Read.All'
-  }
-  else {
-    Assert-GraphAccess -TenantId $TenantId -Scopes 'Directory.Read.All'
-  }
+  Assert-GraphAccess -TenantId $TenantId -Scopes 'Directory.Read.All'
 
   Invoke-MaesterUpWizard `
     -SolutionName $SolutionName `

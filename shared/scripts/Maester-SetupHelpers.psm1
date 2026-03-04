@@ -13,11 +13,6 @@ function Test-CanPrompt {
   }
 }
 
-function Test-CommandExists {
-  param([Parameter(Mandatory = $true)][string]$CommandName)
-  return [bool](Get-Command -Name $CommandName -ErrorAction SilentlyContinue)
-}
-
 function ConvertTo-BoolOrDefault {
   param(
     [Parameter(Mandatory = $false)]
@@ -352,64 +347,6 @@ function Confirm-AzureLogin {
   if ($LASTEXITCODE -ne 0) {
     throw 'Azure login failed.'
   }
-}
-
-function Select-Subscription {
-  param([Parameter(Mandatory = $false)][string]$RequestedSubscriptionId)
-
-  if (-not [string]::IsNullOrWhiteSpace($RequestedSubscriptionId)) {
-    & az account set --subscription $RequestedSubscriptionId
-    if ($LASTEXITCODE -ne 0) {
-      throw "Could not select subscription '$RequestedSubscriptionId'."
-    }
-    return $RequestedSubscriptionId
-  }
-
-  $subscriptionsJson = az account list --query "[].{name:name,id:id,isDefault:isDefault,tenantId:tenantId}" -o json
-  if ($LASTEXITCODE -ne 0) {
-    throw 'Failed to enumerate subscriptions.'
-  }
-
-  $subscriptions = $subscriptionsJson | ConvertFrom-Json
-  if (-not $subscriptions -or $subscriptions.Count -eq 0) {
-    throw 'No Azure subscriptions available for the signed-in account.'
-  }
-
-  if ($subscriptions.Count -eq 1) {
-    $singleId = $subscriptions[0].id
-    Write-Host "Using only available subscription: $($subscriptions[0].name) ($singleId)"
-    & az account set --subscription $singleId
-    if ($LASTEXITCODE -ne 0) {
-      throw "Could not select subscription '$singleId'."
-    }
-    return $singleId
-  }
-
-  Write-Host 'Select a subscription:'
-  for ($index = 0; $index -lt $subscriptions.Count; $index++) {
-    $sub = $subscriptions[$index]
-    $defaultMarker = if ($sub.isDefault) { ' (default)' } else { '' }
-    Write-Host ("[{0}] {1} | {2}{3}" -f ($index + 1), $sub.name, $sub.id, $defaultMarker)
-  }
-
-  $selection = Read-Host 'Enter selection number'
-  $selectionValue = 0
-  if (-not [int]::TryParse($selection, [ref]$selectionValue)) {
-    throw 'Subscription selection must be a number.'
-  }
-
-  $selectedIndex = $selectionValue - 1
-  if ($selectedIndex -lt 0 -or $selectedIndex -ge $subscriptions.Count) {
-    throw 'Subscription selection is out of range.'
-  }
-
-  $selectedId = $subscriptions[$selectedIndex].id
-  & az account set --subscription $selectedId
-  if ($LASTEXITCODE -ne 0) {
-    throw "Could not select subscription '$selectedId'."
-  }
-
-  return $selectedId
 }
 
 function Select-AzureRbacScopes {
