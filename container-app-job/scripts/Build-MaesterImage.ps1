@@ -72,7 +72,7 @@ $preferredJobName = "caj-maester-$($EnvironmentName.ToLower())"
 Write-Host "Updating Container App Job '$preferredJobName' to use image '$imageFqdn'..."
 
 $jobPath = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.App/jobs/${preferredJobName}?api-version=2024-03-01"
-$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
 $armHeaders = @{ Authorization = "Bearer $armToken" }
 try {
   $jobPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$jobPath" -Headers $armHeaders

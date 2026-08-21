@@ -59,12 +59,9 @@ if (-not $TenantId -and $env:AZURE_TENANT_ID) {
   $TenantId = $env:AZURE_TENANT_ID
 }
 
-if ($SubscriptionId) { az account set --subscription $SubscriptionId 2>$null | Out-Null }
-$azAccount = az account show 2>$null | ConvertFrom-Json
-if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
-if (-not $SubscriptionId) { $SubscriptionId = $azAccount.id }
+$azAccount = Get-AzCliSubscriptionContext -SubscriptionId $SubscriptionId -TenantId $TenantId
 if (-not $TenantId) { $TenantId = $azAccount.tenantId }
-$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
 $armHeaders = @{ Authorization = "Bearer $armToken" }
 if (-not $EnvironmentName) {
   $EnvironmentName = if ($env:AZURE_ENV_NAME) { $env:AZURE_ENV_NAME } else { 'dev' }
@@ -162,10 +159,7 @@ $storageBlobDataReaderRoleId = "/subscriptions/$SubscriptionId/providers/Microso
 
 $signedInUser = $null
 try {
-  $signedInUserJson = az ad signed-in-user show --query "{id:id,userPrincipalName:userPrincipalName,displayName:displayName}" -o json 2>$null
-  if ($LASTEXITCODE -eq 0 -and $signedInUserJson) {
-    $signedInUser = $signedInUserJson | ConvertFrom-Json
-  }
+  $signedInUser = Invoke-GraphRestRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,displayName' -TenantId $TenantId
 }
 catch {
   Write-Warning ("Could not resolve signed-in user from Azure CLI for Storage Blob Data Reader assignment. Error: {0}" -f $_.Exception.Message)

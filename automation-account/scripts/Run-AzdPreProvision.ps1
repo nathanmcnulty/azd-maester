@@ -61,7 +61,7 @@ try {
     # List and delete all live jobSchedules via REST API
     # (az automation job-schedule CLI subcommand does not exist)
     $listUri = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$rgName/providers/Microsoft.Automation/automationAccounts/$aaName/jobSchedules?api-version=2023-11-01"
-    $listJson = az rest --method GET --uri $listUri -o json 2>$null
+    $listJson = az rest --method GET --uri $listUri --subscription $SubscriptionId -o json 2>$null
     if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($listJson)) {
       $liveSchedules = @(($listJson | ConvertFrom-Json).value)
       foreach ($js in $liveSchedules) {
@@ -69,7 +69,7 @@ try {
         if (-not [string]::IsNullOrWhiteSpace($jsId)) {
           Write-Host "  Deleting live jobSchedule '$jsId'..."
           $deleteUri = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$rgName/providers/Microsoft.Automation/automationAccounts/$aaName/jobSchedules/${jsId}?api-version=2023-11-01"
-          az rest --method DELETE --uri $deleteUri 2>&1 | Out-Null
+          az rest --method DELETE --uri $deleteUri --subscription $SubscriptionId 2>&1 | Out-Null
         }
       }
     }

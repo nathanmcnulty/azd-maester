@@ -5,6 +5,19 @@ $ErrorActionPreference = 'Stop'
 
 Import-Module (Join-Path $PSScriptRoot 'Maester-Helpers.psm1') -Force
 
+function Resolve-TargetSubscriptionId {
+  param([Parameter(Mandatory = $false)][string]$SubscriptionId)
+
+  if ([string]::IsNullOrWhiteSpace($SubscriptionId)) {
+    $SubscriptionId = $env:AZURE_SUBSCRIPTION_ID
+  }
+  if ([string]::IsNullOrWhiteSpace($SubscriptionId)) {
+    throw 'AZURE_SUBSCRIPTION_ID is required for cleanup.'
+  }
+
+  return $SubscriptionId
+}
+
 function Remove-ResourceGroupLocks {
   param(
     [Parameter(Mandatory = $true)]
@@ -20,7 +33,7 @@ function Remove-ResourceGroupLocks {
 
   Write-Host "Removing resource locks in '$ResourceGroupName' (if any)..."
   $locksUrl = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Authorization/locks?api-version=2016-09-01"
-  $armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv 2>$null
+  $armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv 2>$null
   $locksPayload = $null
   try {
     $locksPayload = Invoke-RestMethod -Method GET -Uri $locksUrl -Headers @{ Authorization = "Bearer $armToken" }
@@ -54,6 +67,9 @@ function Remove-ResourceGroupLocks {
 function Remove-TrackedDirectoryRoleAssignments {
   param(
     [Parameter(Mandatory = $false)]
+    [string]$SubscriptionId,
+
+    [Parameter(Mandatory = $false)]
     [AllowEmptyCollection()]
     [string[]]$AssignmentIds = @()
   )
@@ -62,8 +78,9 @@ function Remove-TrackedDirectoryRoleAssignments {
     return
   }
 
+  $SubscriptionId = Resolve-TargetSubscriptionId -SubscriptionId $SubscriptionId
   Write-Host 'Removing Teams Reader Entra role assignments created by this environment...'
-  $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+  $graphToken = az account get-access-token --subscription $SubscriptionId --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
   $graphHeaders = @{ Authorization = "Bearer $graphToken" }
   foreach ($assignmentId in @($AssignmentIds)) {
     if ([string]::IsNullOrWhiteSpace($assignmentId)) {
@@ -82,6 +99,9 @@ function Remove-TrackedDirectoryRoleAssignments {
 function Remove-TrackedAzureRoleAssignments {
   param(
     [Parameter(Mandatory = $false)]
+    [string]$SubscriptionId,
+
+    [Parameter(Mandatory = $false)]
     [AllowEmptyCollection()]
     [string[]]$RoleAssignmentIds = @()
   )
@@ -90,13 +110,14 @@ function Remove-TrackedAzureRoleAssignments {
     return
   }
 
+  $SubscriptionId = Resolve-TargetSubscriptionId -SubscriptionId $SubscriptionId
   Write-Host 'Removing Azure RBAC role assignments created by this environment...'
   foreach ($roleAssignmentId in @($RoleAssignmentIds)) {
     if ([string]::IsNullOrWhiteSpace($roleAssignmentId)) {
       continue
     }
 
-    & az role assignment delete --ids $roleAssignmentId | Out-Null
+    & az role assignment delete --ids $roleAssignmentId --subscription $SubscriptionId | Out-Null
     if ($LASTEXITCODE -ne 0) {
       Write-Warning "Failed to remove Azure RBAC role assignment id '$roleAssignmentId'."
     }
@@ -105,6 +126,9 @@ function Remove-TrackedAzureRoleAssignments {
 
 function Remove-TrackedExchangeAppRoleAssignments {
   param(
+    [Parameter(Mandatory = $false)]
+    [string]$SubscriptionId,
+
     [Parameter(Mandatory = $false)]
     [string]$PrincipalObjectId,
 
@@ -117,8 +141,9 @@ function Remove-TrackedExchangeAppRoleAssignments {
     return
   }
 
+  $SubscriptionId = Resolve-TargetSubscriptionId -SubscriptionId $SubscriptionId
   Write-Host 'Removing Exchange appRoleAssignments created by this environment...'
-  $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+  $graphToken = az account get-access-token --subscription $SubscriptionId --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
   $graphHeaders = @{ Authorization = "Bearer $graphToken" }
   foreach ($assignmentId in @($AssignmentIds)) {
     if ([string]::IsNullOrWhiteSpace($assignmentId)) {
@@ -137,6 +162,9 @@ function Remove-TrackedExchangeAppRoleAssignments {
 function Remove-ExchangeRbacAssignments {
   param(
     [Parameter(Mandatory = $false)]
+    [string]$SubscriptionId,
+
+    [Parameter(Mandatory = $false)]
     [string]$RoleAssigneeDisplayName
   )
 
@@ -144,6 +172,7 @@ function Remove-ExchangeRbacAssignments {
     return
   }
 
+  $SubscriptionId = Resolve-TargetSubscriptionId -SubscriptionId $SubscriptionId
   Write-Host "Attempting Exchange RBAC cleanup for '$RoleAssigneeDisplayName' (best-effort)..."
   try {
     if (-not (Test-ModuleAvailable -ModuleName 'ExchangeOnlineManagement')) {
@@ -154,10 +183,10 @@ function Remove-ExchangeRbacAssignments {
     $exoToken = $null
     $exoOrganization = $null
     try {
-      $exoToken = (az account get-access-token --resource https://outlook.office365.com --query accessToken -o tsv 2>$null)
+      $exoToken = (az account get-access-token --subscription $SubscriptionId --resource https://outlook.office365.com --query accessToken -o tsv 2>$null)
       if ($exoToken) {
         try {
-          $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+          $graphToken = az account get-access-token --subscription $SubscriptionId --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
           $orgData = Invoke-RestMethod -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=verifiedDomains' -Headers @{ Authorization = "Bearer $graphToken" }
           if ($orgData.value -and $orgData.value.Count -gt 0) {
             $initialDomain = @($orgData.value[0].verifiedDomains | Where-Object { $_.isInitial -eq $true }) | Select-Object -First 1
@@ -231,10 +260,10 @@ function Invoke-MaesterStandardPreDownCleanup {
   $exoAppRoleAssignmentIds = @(ConvertFrom-JsonArrayOrEmpty -Json (Get-AzdEnvironmentValue -Values $envValues -Name 'EXO_APPROLE_ASSIGNMENT_IDS'))
   $exoServicePrincipalDisplayName = Get-AzdEnvironmentValue -Values $envValues -Name 'EXO_SERVICE_PRINCIPAL_DISPLAY_NAME'
 
-  Remove-TrackedDirectoryRoleAssignments -AssignmentIds $teamsRoleAssignmentIds
-  Remove-TrackedAzureRoleAssignments -RoleAssignmentIds $azureRoleAssignmentIds
-  Remove-TrackedExchangeAppRoleAssignments -PrincipalObjectId $miPrincipalId -AssignmentIds $exoAppRoleAssignmentIds
-  Remove-ExchangeRbacAssignments -RoleAssigneeDisplayName $exoServicePrincipalDisplayName
+  Remove-TrackedDirectoryRoleAssignments -SubscriptionId $subscriptionId -AssignmentIds $teamsRoleAssignmentIds
+  Remove-TrackedAzureRoleAssignments -SubscriptionId $subscriptionId -RoleAssignmentIds $azureRoleAssignmentIds
+  Remove-TrackedExchangeAppRoleAssignments -SubscriptionId $subscriptionId -PrincipalObjectId $miPrincipalId -AssignmentIds $exoAppRoleAssignmentIds
+  Remove-ExchangeRbacAssignments -SubscriptionId $subscriptionId -RoleAssigneeDisplayName $exoServicePrincipalDisplayName
 
   if (-not [string]::IsNullOrWhiteSpace($resourceGroupName)) {
     Remove-WebAppEasyAuthEntraApplications `
@@ -250,6 +279,9 @@ function Invoke-MaesterStandardPreDownCleanup {
 function Invoke-AdoRest {
   param(
     [Parameter(Mandatory = $true)]
+    [string]$SubscriptionId,
+
+    [Parameter(Mandatory = $true)]
     [ValidateSet('GET', 'POST', 'PUT', 'PATCH', 'DELETE')]
     [string]$Method,
 
@@ -263,7 +295,7 @@ function Invoke-AdoRest {
     [switch]$AllowNotFound
   )
 
-  $adoToken = az account get-access-token --resource '499b84ac-1321-427f-aa17-267ca6975798' --query accessToken -o tsv 2>$null
+  $adoToken = az account get-access-token --subscription $SubscriptionId --resource '499b84ac-1321-427f-aa17-267ca6975798' --query accessToken -o tsv 2>$null
   $adoHeaders = @{ Authorization = "Bearer $adoToken" }
 
   $invokeParams = @{
@@ -310,6 +342,9 @@ function Invoke-AdoRest {
 function Remove-AdoServiceConnectionById {
   param(
     [Parameter(Mandatory = $true)]
+    [string]$SubscriptionId,
+
+    [Parameter(Mandatory = $true)]
     [string]$Organization,
 
     [Parameter(Mandatory = $true)]
@@ -330,11 +365,11 @@ function Remove-AdoServiceConnectionById {
 
   foreach ($deleteUri in @($deleteUris | Select-Object -Unique)) {
     try {
-      Invoke-AdoRest -Method DELETE -Uri $deleteUri -AllowNotFound | Out-Null
+      Invoke-AdoRest -SubscriptionId $SubscriptionId -Method DELETE -Uri $deleteUri -AllowNotFound | Out-Null
       $verificationUri = "https://dev.azure.com/$Organization/$ProjectEncoded/_apis/serviceendpoint/endpoints/$($ServiceConnectionId)?api-version=7.1-preview.4"
       $maxVerifyAttempts = 6
       for ($attempt = 1; $attempt -le $maxVerifyAttempts; $attempt++) {
-        $verification = Invoke-AdoRest -Method GET -Uri $verificationUri -AllowNotFound
+        $verification = Invoke-AdoRest -SubscriptionId $SubscriptionId -Method GET -Uri $verificationUri -AllowNotFound
         if ($null -eq $verification) {
           return $true
         }
@@ -355,6 +390,9 @@ function Remove-AdoServiceConnectionById {
 function Remove-TrackedBaseRoleAssignments {
   param(
     [Parameter(Mandatory = $false)]
+    [string]$SubscriptionId,
+
+    [Parameter(Mandatory = $false)]
     [AllowEmptyCollection()]
     [string[]]$RoleAssignmentIds = @()
   )
@@ -363,13 +401,14 @@ function Remove-TrackedBaseRoleAssignments {
     return
   }
 
+  $SubscriptionId = Resolve-TargetSubscriptionId -SubscriptionId $SubscriptionId
   Write-Host 'Removing base Azure role assignments created for Azure DevOps workload identity...'
   foreach ($roleAssignmentId in @($RoleAssignmentIds)) {
     if ([string]::IsNullOrWhiteSpace($roleAssignmentId)) {
       continue
     }
 
-    & az role assignment delete --ids $roleAssignmentId | Out-Null
+    & az role assignment delete --ids $roleAssignmentId --subscription $SubscriptionId | Out-Null
     if ($LASTEXITCODE -ne 0) {
       Write-Warning "Failed to remove base role assignment id '$roleAssignmentId'."
     }
@@ -417,7 +456,7 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
     try {
       $exchangeManageAsAppRoleId = 'dc50a0fb-09a3-484d-be87-e023b12c6440'
       $appAssignmentsUrl = "https://graph.microsoft.com/v1.0/servicePrincipals/$workloadServicePrincipalObjectId/appRoleAssignments?`$select=id,appRoleId"
-      $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+      $graphToken = az account get-access-token --subscription $subscriptionId --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
       $appAssignmentsPayload = Invoke-RestMethod -Method GET -Uri $appAssignmentsUrl -Headers @{ Authorization = "Bearer $graphToken" }
       $resolvedAssignmentIds = @($appAssignmentsPayload.value | Where-Object { $_.appRoleId -eq $exchangeManageAsAppRoleId } | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
       if ($resolvedAssignmentIds.Count -gt 0) {
@@ -431,19 +470,18 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
   }
 
   if (-not [string]::IsNullOrWhiteSpace($subscriptionId)) {
-    az account set --subscription $subscriptionId 2>$null | Out-Null
-    $azAccount = az account show 2>$null | ConvertFrom-Json
-    if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
+    & az account get-access-token --subscription $subscriptionId --resource https://management.azure.com/ --output none 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "Subscription '$subscriptionId' is not available in the current Azure CLI login." }
   }
 
   if (-not [string]::IsNullOrWhiteSpace($resourceGroupName) -and -not [string]::IsNullOrWhiteSpace($subscriptionId)) {
     Remove-ResourceGroupLocks -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName
   }
 
-  Remove-TrackedDirectoryRoleAssignments -AssignmentIds $teamsRoleAssignmentIds
-  Remove-TrackedAzureRoleAssignments -RoleAssignmentIds $azureRoleAssignmentIds
-  Remove-TrackedBaseRoleAssignments -RoleAssignmentIds $baseRoleAssignmentIds
-  Remove-TrackedExchangeAppRoleAssignments -PrincipalObjectId $workloadServicePrincipalObjectId -AssignmentIds $exoAppRoleAssignmentIds
+  Remove-TrackedDirectoryRoleAssignments -SubscriptionId $subscriptionId -AssignmentIds $teamsRoleAssignmentIds
+  Remove-TrackedAzureRoleAssignments -SubscriptionId $subscriptionId -RoleAssignmentIds $azureRoleAssignmentIds
+  Remove-TrackedBaseRoleAssignments -SubscriptionId $subscriptionId -RoleAssignmentIds $baseRoleAssignmentIds
+  Remove-TrackedExchangeAppRoleAssignments -SubscriptionId $subscriptionId -PrincipalObjectId $workloadServicePrincipalObjectId -AssignmentIds $exoAppRoleAssignmentIds
 
   $exchangeIdentityCandidates = @(
     @(
@@ -455,7 +493,7 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
   )
 
   foreach ($identity in $exchangeIdentityCandidates) {
-    Remove-ExchangeRbacAssignments -RoleAssigneeDisplayName $identity
+    Remove-ExchangeRbacAssignments -SubscriptionId $subscriptionId -RoleAssigneeDisplayName $identity
   }
 
   $adoProjectEncoded = $null
@@ -468,7 +506,7 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
       $adoProjectEncoded = [System.Uri]::EscapeDataString($adoProject)
 
       try {
-        $projectResponse = Invoke-AdoRest -Method GET -Uri "https://dev.azure.com/$adoOrganization/_apis/projects/$($adoProjectEncoded)?api-version=7.1-preview.4"
+        $projectResponse = Invoke-AdoRest -SubscriptionId $subscriptionId -Method GET -Uri "https://dev.azure.com/$adoOrganization/_apis/projects/$($adoProjectEncoded)?api-version=7.1-preview.4"
         if ($projectResponse -and $projectResponse.id) {
           $adoProjectId = [string]$projectResponse.id
         }
@@ -479,15 +517,15 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
 
       if (-not [string]::IsNullOrWhiteSpace($adoPipelineId)) {
         Write-Host "Removing Azure DevOps pipeline '$adoPipelineName' ($adoPipelineId)..."
-        Invoke-AdoRest -Method DELETE -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/build/definitions/$($adoPipelineId)?api-version=7.1" | Out-Null
+        Invoke-AdoRest -SubscriptionId $subscriptionId -Method DELETE -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/build/definitions/$($adoPipelineId)?api-version=7.1" | Out-Null
       }
       elseif (-not [string]::IsNullOrWhiteSpace($adoPipelineName)) {
         try {
-          $pipelines = Invoke-AdoRest -Method GET -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/pipelines?api-version=7.1-preview.1"
+          $pipelines = Invoke-AdoRest -SubscriptionId $subscriptionId -Method GET -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/pipelines?api-version=7.1-preview.1"
           $pipeline = @($pipelines.value | Where-Object { $_.name -eq $adoPipelineName } | Select-Object -First 1)
           if ($pipeline.Count -gt 0 -and $pipeline[0].id) {
             Write-Host "Removing Azure DevOps pipeline '$adoPipelineName' ($($pipeline[0].id))..."
-            Invoke-AdoRest -Method DELETE -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/build/definitions/$($pipeline[0].id)?api-version=7.1" | Out-Null
+            Invoke-AdoRest -SubscriptionId $subscriptionId -Method DELETE -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/build/definitions/$($pipeline[0].id)?api-version=7.1" | Out-Null
           }
         }
         catch {
@@ -496,7 +534,7 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
 
       if (-not [string]::IsNullOrWhiteSpace($adoServiceConnectionId)) {
         Write-Host "Removing Azure DevOps service connection '$adoServiceConnectionName' ($adoServiceConnectionId)..."
-        $removed = Remove-AdoServiceConnectionById -Organization $adoOrganization -ProjectEncoded $adoProjectEncoded -ServiceConnectionId $adoServiceConnectionId -ProjectId $adoProjectId
+        $removed = Remove-AdoServiceConnectionById -SubscriptionId $subscriptionId -Organization $adoOrganization -ProjectEncoded $adoProjectEncoded -ServiceConnectionId $adoServiceConnectionId -ProjectId $adoProjectId
         if (-not $removed) {
           Write-Warning "Failed to remove Azure DevOps service connection id '$adoServiceConnectionId'."
           $retryAdoServiceConnectionId = $adoServiceConnectionId
@@ -506,11 +544,11 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
       elseif (-not [string]::IsNullOrWhiteSpace($adoServiceConnectionName)) {
         try {
           $encodedEndpointName = [System.Uri]::EscapeDataString($adoServiceConnectionName)
-          $serviceConnections = Invoke-AdoRest -Method GET -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/serviceendpoint/endpoints?endpointNames=$encodedEndpointName&includeFailed=true&api-version=7.1-preview.4"
+          $serviceConnections = Invoke-AdoRest -SubscriptionId $subscriptionId -Method GET -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/serviceendpoint/endpoints?endpointNames=$encodedEndpointName&includeFailed=true&api-version=7.1-preview.4"
           $serviceConnection = @($serviceConnections.value | Where-Object { $_.name -eq $adoServiceConnectionName } | Select-Object -First 1)
           if ($serviceConnection.Count -gt 0 -and $serviceConnection[0].id) {
             Write-Host "Removing Azure DevOps service connection '$adoServiceConnectionName' ($($serviceConnection[0].id))..."
-            $removed = Remove-AdoServiceConnectionById -Organization $adoOrganization -ProjectEncoded $adoProjectEncoded -ServiceConnectionId ([string]$serviceConnection[0].id) -ProjectId $adoProjectId
+            $removed = Remove-AdoServiceConnectionById -SubscriptionId $subscriptionId -Organization $adoOrganization -ProjectEncoded $adoProjectEncoded -ServiceConnectionId ([string]$serviceConnection[0].id) -ProjectId $adoProjectId
             if (-not $removed) {
               Write-Warning "Failed to remove Azure DevOps service connection '$adoServiceConnectionName' ($($serviceConnection[0].id))."
               $retryAdoServiceConnectionId = [string]$serviceConnection[0].id
@@ -524,15 +562,15 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
 
       if (-not [string]::IsNullOrWhiteSpace($adoRepositoryId)) {
         Write-Host "Removing Azure DevOps repository '$adoRepositoryName' ($adoRepositoryId)..."
-        Invoke-AdoRest -Method DELETE -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/git/repositories/$($adoRepositoryId)?api-version=7.1-preview.1" | Out-Null
+        Invoke-AdoRest -SubscriptionId $subscriptionId -Method DELETE -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/git/repositories/$($adoRepositoryId)?api-version=7.1-preview.1" | Out-Null
       }
       elseif (-not [string]::IsNullOrWhiteSpace($adoRepositoryName)) {
         try {
-          $repos = Invoke-AdoRest -Method GET -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/git/repositories?api-version=7.1-preview.1"
+          $repos = Invoke-AdoRest -SubscriptionId $subscriptionId -Method GET -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/git/repositories?api-version=7.1-preview.1"
           $repo = @($repos.value | Where-Object { $_.name -eq $adoRepositoryName } | Select-Object -First 1)
           if ($repo.Count -gt 0 -and $repo[0].id) {
             Write-Host "Removing Azure DevOps repository '$adoRepositoryName' ($($repo[0].id))..."
-            Invoke-AdoRest -Method DELETE -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/git/repositories/$($repo[0].id)?api-version=7.1-preview.1" | Out-Null
+            Invoke-AdoRest -SubscriptionId $subscriptionId -Method DELETE -Uri "https://dev.azure.com/$adoOrganization/$adoProjectEncoded/_apis/git/repositories/$($repo[0].id)?api-version=7.1-preview.1" | Out-Null
           }
         }
         catch {
@@ -547,7 +585,7 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
   if (-not [string]::IsNullOrWhiteSpace($workloadAppObjectId)) {
     Write-Host "Removing workload identity Entra application object '$workloadAppObjectId'..."
     try {
-      $graphToken = az account get-access-token --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+      $graphToken = az account get-access-token --subscription $subscriptionId --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
       Invoke-RestMethod -Method DELETE -Uri "https://graph.microsoft.com/v1.0/applications/$workloadAppObjectId" -Headers @{ Authorization = "Bearer $graphToken" } | Out-Null
     }
     catch {
@@ -556,8 +594,15 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
   }
   elseif (-not [string]::IsNullOrWhiteSpace($workloadAppId)) {
     Write-Host "Removing workload identity Entra application appId '$workloadAppId'..."
-    & az ad app delete --id $workloadAppId | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    try {
+      $graphToken = az account get-access-token --subscription $subscriptionId --resource https://graph.microsoft.com/ --query accessToken -o tsv 2>$null
+      $filter = [System.Uri]::EscapeDataString("appId eq '$workloadAppId'")
+      $application = (Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=$filter&`$select=id" -Headers @{ Authorization = "Bearer $graphToken" }).value | Select-Object -First 1
+      if ($application.id) {
+        Invoke-RestMethod -Method DELETE -Uri "https://graph.microsoft.com/v1.0/applications/$($application.id)" -Headers @{ Authorization = "Bearer $graphToken" } | Out-Null
+      }
+    }
+    catch {
       Write-Warning "Failed to remove Entra application appId '$workloadAppId'."
     }
   }
@@ -567,7 +612,7 @@ function Invoke-MaesterAzureDevOpsPreDownCleanup {
       -not [string]::IsNullOrWhiteSpace($adoProjectEncoded)) {
     Write-Host "Retrying Azure DevOps service connection '$retryAdoServiceConnectionName' ($retryAdoServiceConnectionId) after workload identity cleanup..."
     Start-Sleep -Seconds 10
-    $removed = Remove-AdoServiceConnectionById -Organization $adoOrganization -ProjectEncoded $adoProjectEncoded -ServiceConnectionId $retryAdoServiceConnectionId -ProjectId $adoProjectId
+    $removed = Remove-AdoServiceConnectionById -SubscriptionId $subscriptionId -Organization $adoOrganization -ProjectEncoded $adoProjectEncoded -ServiceConnectionId $retryAdoServiceConnectionId -ProjectId $adoProjectId
     if (-not $removed) {
       Write-Warning "Retry failed for Azure DevOps service connection '$retryAdoServiceConnectionName' ($retryAdoServiceConnectionId)."
     }

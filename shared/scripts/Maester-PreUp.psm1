@@ -35,10 +35,7 @@ function Invoke-MaesterPreUp {
 
   $subscriptionId = Get-ValueFromEnvironmentOrAzd -Name 'AZURE_SUBSCRIPTION_ID' -AzdValues $envValues
   if ([string]::IsNullOrWhiteSpace($subscriptionId)) {
-    $subscriptionId = (& az account show --query id -o tsv 2>$null)
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($subscriptionId)) {
-      throw "AZURE_SUBSCRIPTION_ID is required to resolve resource group '$resourceGroupName'."
-    }
+    throw "AZURE_SUBSCRIPTION_ID is required to resolve resource group '$resourceGroupName'."
   }
 
   $exists = (& az group exists --name $resourceGroupName --subscription $subscriptionId -o tsv 2>$null)
