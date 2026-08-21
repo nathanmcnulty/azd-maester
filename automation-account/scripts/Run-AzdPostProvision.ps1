@@ -222,7 +222,7 @@ $testParams['PassThru'] = $true
 
 $validationResult = & "$PSScriptRoot\Invoke-RunbookValidation.ps1" @testParams
 
-$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
 $armHeaders = @{ Authorization = "Bearer $armToken" }
 $resourcesPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/resources?api-version=2021-04-01"
 $resourcesPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$resourcesPath" -Headers $armHeaders

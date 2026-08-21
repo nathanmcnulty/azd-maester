@@ -20,12 +20,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if ($SubscriptionId) { az account set --subscription $SubscriptionId 2>$null | Out-Null }
-$azAccount = az account show 2>$null | ConvertFrom-Json
-if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
-if (-not $SubscriptionId) { $SubscriptionId = $azAccount.id }
+Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-SetupHelpers.psm1') -Force
+
+$azAccount = Get-AzCliSubscriptionContext -SubscriptionId $SubscriptionId -TenantId $TenantId
 if (-not $TenantId) { $TenantId = $azAccount.tenantId }
-$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
 $armHeaders = @{ Authorization = "Bearer $armToken" }
 
 # Discover function app if not specified
@@ -145,7 +144,7 @@ do {
       $storageName = $storage.name
 
       # List blobs in latest container to see if latest.html was recently updated
-      $plainToken = az account get-access-token --resource https://storage.azure.com/ --query accessToken -o tsv 2>$null
+      $plainToken = az account get-access-token --subscription $SubscriptionId --resource https://storage.azure.com/ --query accessToken -o tsv 2>$null
 
       $blobHeaders = @{
         'Authorization' = "Bearer $plainToken"

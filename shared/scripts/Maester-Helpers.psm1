@@ -155,7 +155,7 @@ function Remove-WebAppEasyAuthEntraApplications {
   param(
     [Parameter(Mandatory = $true)]
     [string]$ResourceGroupName,
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $true)]
     [string]$SubscriptionId,
     [Parameter(Mandatory = $false)]
     [string[]]$AdditionalApplicationObjectIds,
@@ -178,10 +178,7 @@ function Remove-WebAppEasyAuthEntraApplications {
     }
   }
 
-  $subscriptionArgs = @()
-  if (-not [string]::IsNullOrWhiteSpace($SubscriptionId)) {
-    $subscriptionArgs = @('--subscription', $SubscriptionId)
-  }
+  $subscriptionArgs = @('--subscription', $SubscriptionId)
 
   if (-not [string]::IsNullOrWhiteSpace($SubscriptionId)) {
     Write-Host "Discovering Web Apps in '$ResourceGroupName' for Easy Auth Entra app cleanup..."
@@ -226,7 +223,7 @@ function Remove-WebAppEasyAuthEntraApplications {
 
   $deletedAppObjectIds = New-Object System.Collections.Generic.HashSet[string]
   foreach ($appObjectId in $applicationObjectIds) {
-    $applicationRaw = & az rest --method get --url "https://graph.microsoft.com/v1.0/applications/${appObjectId}?`$select=id,appId,displayName"
+    $applicationRaw = & az rest --method get --url "https://graph.microsoft.com/v1.0/applications/${appObjectId}?`$select=id,appId,displayName" @subscriptionArgs
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($applicationRaw)) {
       Write-Warning "Unable to query Entra application by objectId '$appObjectId'."
       continue
@@ -247,7 +244,7 @@ function Remove-WebAppEasyAuthEntraApplications {
     }
 
     Write-Host "Removing Easy Auth Entra application '$displayName' ($($application.appId))"
-    & az rest --method delete --url "https://graph.microsoft.com/v1.0/applications/$($application.id)" | Out-Null
+    & az rest --method delete --url "https://graph.microsoft.com/v1.0/applications/$($application.id)" @subscriptionArgs | Out-Null
     if ($LASTEXITCODE -ne 0) {
       Write-Warning "Failed to remove Entra application '$displayName' ($($application.id))."
       continue
@@ -257,14 +254,15 @@ function Remove-WebAppEasyAuthEntraApplications {
   }
 
   foreach ($clientId in $clientIds) {
-    $appByClientIdRaw = & az ad app show --id $clientId -o json 2>$null
+    $clientFilter = [System.Uri]::EscapeDataString("appId eq '$clientId'")
+    $appByClientIdRaw = & az rest --method get --url "https://graph.microsoft.com/v1.0/applications?`$filter=$clientFilter&`$select=id,appId,displayName" @subscriptionArgs 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($appByClientIdRaw)) {
       continue
     }
 
     try {
       $appByClientId = $appByClientIdRaw | ConvertFrom-Json
-      $apps = @($appByClientId)
+      $apps = @($appByClientId.value)
     }
     catch {
       Write-Warning "Failed to parse Entra application lookup for appId '$clientId'."
@@ -287,7 +285,7 @@ function Remove-WebAppEasyAuthEntraApplications {
       }
 
       Write-Host "Removing Easy Auth Entra application '$displayName' ($($app.appId))"
-      & az rest --method delete --url "https://graph.microsoft.com/v1.0/applications/$($app.id)" | Out-Null
+      & az rest --method delete --url "https://graph.microsoft.com/v1.0/applications/$($app.id)" @subscriptionArgs | Out-Null
       if ($LASTEXITCODE -ne 0) {
         Write-Warning "Failed to remove Entra application '$displayName' ($($app.id))."
         continue

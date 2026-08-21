@@ -142,6 +142,33 @@ function Set-AzdEnvJsonArray {
 
 # ── Authentication helpers ────────────────────────────────────────────────────
 
+function Get-AzCliSubscriptionContext {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$SubscriptionId,
+    [Parameter(Mandatory = $false)]
+    [string]$TenantId
+  )
+
+  $accountsJson = (& az account list -o json 2>$null)
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accountsJson)) {
+    throw 'Not authenticated. Run: azd auth login'
+  }
+
+  $account = @($accountsJson | ConvertFrom-Json) |
+    Where-Object { $_.id -ieq $SubscriptionId } |
+    Select-Object -First 1
+  if (-not $account) {
+    throw "Subscription '$SubscriptionId' is not available in the current Azure CLI login."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($TenantId) -and $account.tenantId -ine $TenantId) {
+    throw "Subscription '$SubscriptionId' belongs to tenant '$($account.tenantId)', not selected tenant '$TenantId'."
+  }
+
+  return $account
+}
+
 function Get-AzCliAccessToken {
   param(
     [Parameter(Mandatory = $true)]
@@ -187,7 +214,7 @@ function Get-GraphAccessToken {
   }
 
   if ($AllowInteractiveLogin) {
-    Confirm-AzureLogin
+    Confirm-AzureLogin -TenantId $TenantId
     $token = Get-AzCliAccessToken -Resource 'https://graph.microsoft.com' -TenantId $TenantId
     if ($token) {
       return $token
@@ -333,8 +360,14 @@ function Connect-ExchangeOnlineSilent {
 }
 
 function Confirm-AzureLogin {
+  param([Parameter(Mandatory = $false)][string]$TenantId)
+
   try {
-    $null = az account show --output none 2>$null
+    $tokenArgs = @('account', 'get-access-token', '--resource', 'https://graph.microsoft.com', '--output', 'none')
+    if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+      $tokenArgs += @('--tenant', $TenantId)
+    }
+    $null = & az @tokenArgs 2>$null
     if ($LASTEXITCODE -eq 0) {
       return
     }
@@ -343,7 +376,11 @@ function Confirm-AzureLogin {
   }
 
   Write-Host 'No active Azure CLI login detected. Opening Azure login...'
-  & az login | Out-Null
+  $loginArgs = @('login')
+  if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+    $loginArgs += @('--tenant', $TenantId)
+  }
+  & az @loginArgs | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw 'Azure login failed.'
   }
@@ -550,7 +587,7 @@ function Test-AzureReaderRoleAssignment {
     "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/$readerRoleGuid"
   }
 
-  $armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+  $armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
   $armHeaders = @{ Authorization = "Bearer $armToken" }
 
   # Pre-check: look for an existing Reader assignment for this principal at this scope

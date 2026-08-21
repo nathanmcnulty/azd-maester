@@ -22,7 +22,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $resourceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/$ProviderNamespace/$ResourceType/$ResourceName"
-$armToken = az account get-access-token --resource https://management.azure.com/ --query accessToken -o tsv
+$armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
 $payload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com${resourceId}?api-version=$ApiVersion" -Headers @{ Authorization = "Bearer $armToken" }
 if (-not $payload) {
   throw "Failed to read resource '$resourceId'."

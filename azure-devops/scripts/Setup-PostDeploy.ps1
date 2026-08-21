@@ -645,7 +645,7 @@ if (-not $TenantId -and $currentContext -and $currentContext.Tenant) {
   $TenantId = $currentContext.Tenant.Id
 }
 
-$subscriptionName = az account show --query name -o tsv
+$subscriptionName = (Get-AzCliSubscriptionContext -SubscriptionId $SubscriptionId -TenantId $TenantId).name
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($subscriptionName)) {
   if ($currentContext -and $currentContext.Subscription) {
     $subscriptionName = $currentContext.Subscription.Name
@@ -928,10 +928,7 @@ $storageBlobDataReaderRoleId = "/subscriptions/$SubscriptionId/providers/Microso
 
 $signedInUser = $null
 try {
-  $signedInUserJson = az ad signed-in-user show --query "{id:id,userPrincipalName:userPrincipalName,displayName:displayName}" -o json 2>$null
-  if ($LASTEXITCODE -eq 0 -and $signedInUserJson) {
-    $signedInUser = $signedInUserJson | ConvertFrom-Json
-  }
+  $signedInUser = Invoke-GraphRestRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,displayName' -TenantId $TenantId
 }
 catch {
   Write-Warning ("Could not resolve signed-in user from Azure CLI for Storage Blob Data Reader assignment. Error: {0}" -f $_.Exception.Message)

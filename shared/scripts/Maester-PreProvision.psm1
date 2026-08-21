@@ -74,10 +74,7 @@ function Invoke-MaesterPreProvision {
     }
   }
 
-  if ($SubscriptionId) { az account set --subscription $SubscriptionId 2>$null | Out-Null }
-  $azAccount = az account show 2>$null | ConvertFrom-Json
-  if (-not $azAccount) { throw 'Not authenticated. Run: azd auth login' }
-  if (-not $SubscriptionId) { $SubscriptionId = $azAccount.id }
+  $azAccount = Get-AzCliSubscriptionContext -SubscriptionId $SubscriptionId -TenantId $TenantId
   if (-not $TenantId) { $TenantId = $azAccount.tenantId }
 
   if ([string]::IsNullOrWhiteSpace($TenantId)) {
