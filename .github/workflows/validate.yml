@@ -1,0 +1,38 @@
+name: Validate solutions
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - name: Install test dependencies
+        run: Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force
+      - name: Run repository tests
+        run: Invoke-Pester -Path ./tests -CI
+      - name: Parse PowerShell
+        run: |
+          $errors = @()
+          Get-ChildItem -Path . -Recurse -File -Include *.ps1,*.psm1 | ForEach-Object {
+            $tokens = $null
+            $fileErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$fileErrors) | Out-Null
+            $errors += @($fileErrors)
+          }
+          if ($errors.Count) { throw ($errors | Out-String) }
