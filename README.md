@@ -2,6 +2,9 @@
 
 Production-style `azd` templates for running Maester on Azure with Managed Identities and minimal operator steps.
 
+> [!IMPORTANT]
+> This repository contains multiple deployable solutions. The repository root is an intentional catalog and guard entry point, not a deployable Maester environment: choose one solution subfolder before running `azd up`. A root-level `azd up` exits before provisioning and prints the correct folder-specific command.
+
 https://github.com/user-attachments/assets/c2781a8e-46f6-4be0-8bf2-27f3b6425748
 
 ## Solutions
@@ -17,7 +20,7 @@ Use `automation-account` first. It has the simplest setup and serves as the refe
 
 ## Quickstart by solution
 
-After `azd init -t nathanmcnulty/azd-maester`, cd into the folder for your preferred solution and run `azd up`:
+After `azd init -t nathanmcnulty/azd-maester`, choose a solution folder and run `azd up` there. There is deliberately no truthful root-level `azd init ... && azd up` deployment command:
 
 - ### [automation-account](automation-account/README.md)
   - `cd automation-account`
