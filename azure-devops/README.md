@@ -45,6 +45,10 @@ For non-interactive runs (`azd up --no-prompt`), if `AZURE_RESOURCE_GROUP` is se
 - Toggling an option from `Yes` to `No` in a later `azd up` run is additive only and does **not** revoke prior assignments.
 - Revocation/best-effort cleanup runs on `azd down` (predown hook).
 
+## Authority boundaries
+
+Some environments already have the required Microsoft Graph permissions consented and assigned. If Graph consent has not been completed previously, the deployment may require a **Global Administrator or Privileged Role Administrator**. See the selected profile and permission sections for solution-specific details. Optional Exchange, Teams, Azure, and Easy Auth setup has its own prerequisites, so a successful repository or service-connection setup is not proof that the monitoring workload is ready.
+
 ## Operations
 
 - Provision/update:

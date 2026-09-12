@@ -45,7 +45,8 @@ You can optionally enable additional data collection/connectivity for Maester by
 
 ### Permission behavior
 
-- Advanced permission steps are performed using the privileges of the user running setup.
+- Azure RBAC, Entra directory roles, Exchange assignments, and Microsoft Graph app-role assignments are separate authorities.
+- Some environments already have the required Microsoft Graph permissions consented and assigned. If Graph consent has not been completed previously, the deployment may require a **Global Administrator or Privileged Role Administrator**. See the selected profile and permission sections for solution-specific details.
 - If a step fails due to missing privileges, the scripts will:
   - Prompt you to **Stop** or **Skip** in interactive runs.
   - Default to **Skip + continue** in non-interactive runs (CI).
@@ -130,7 +131,7 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
   - `archive/maester-report-<timestamp>.html.gz`
   - `latest/latest.html`
 - In WebApp mode, latest report is published to Web App `index.html`
-- Entra auth via app registration + admin consent are configured automatically
+- Entra auth via app registration is configured automatically. Existing Microsoft Graph consent and app-role assignments are reused; if they are not already present, the first run may require a **Global Administrator or Privileged Role Administrator**.
 - Signed-in deployment user is granted `Storage Blob Data Reader` on the solution storage account
 - Blob soft delete is enabled for 1 day, with blob versioning disabled
 - Archive uploads are gzip compressed and written directly to Cool tier
