@@ -10,7 +10,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-PreProvision.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Maester-PreProvision.psm1') -Force
 
 Invoke-MaesterPreProvision `
   -SolutionName 'container-app-job' `

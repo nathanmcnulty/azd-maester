@@ -1,6 +1,6 @@
 name: maester-azure-devops
 metadata:
-  template: maester-azure-devops@0.0.1
+  template: maester-azure-devops@0.1.0
 infra:
   provider: bicep
   path: infra
@@ -12,15 +12,22 @@ hooks:
     shell: pwsh
     run: ./scripts/Run-AzdPreUp.ps1
     interactive: true
+    continueOnError: false
   preprovision:
     shell: pwsh
     run: ./scripts/Run-AzdPreProvision.ps1
     interactive: true
+    continueOnError: false
   postprovision:
     shell: pwsh
     run: ./scripts/Run-AzdPostProvision.ps1
     interactive: true
+    continueOnError: false
   predown:
     shell: pwsh
     run: ./scripts/Run-AzdPreDown.ps1
     interactive: true
+    continueOnError: false
+
+requiredVersions:
+  azd: ">= 1.23.0"

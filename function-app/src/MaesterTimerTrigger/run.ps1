@@ -193,7 +193,7 @@ foreach ($mod in $optionalModules) {
 Write-Step 'Importing core modules'
 Import-Module Az.Accounts -Force -ErrorAction Stop
 Import-Module Microsoft.Graph.Authentication -Force -ErrorAction Stop
-Import-Module Maester -Force -ErrorAction Stop
+Import-Module Maester -RequiredVersion '2.2.0' -Force -ErrorAction Stop
 Import-Module Pester -Force -ErrorAction Stop
 Write-Step 'Core modules imported'
 
@@ -362,9 +362,11 @@ $tempRoot = Join-Path -Path $tempBase -ChildPath ("maester-{0}" -f (Get-Date -Fo
 New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
 Write-Step "Temp output folder: $tempRoot"
 
-$maesterModule = Get-Module -Name Maester -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+$maesterModule = Get-Module -Name Maester -ListAvailable |
+  Where-Object { $_.Version -eq [version]'2.2.0' } |
+  Select-Object -First 1
 if (-not $maesterModule) {
-  throw 'Maester module was not found after import.'
+  throw 'Maester module version 2.2.0 was not found after import.'
 }
 Write-Step "Maester module version: $($maesterModule.Version) at $($maesterModule.ModuleBase)"
 

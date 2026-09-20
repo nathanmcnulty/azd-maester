@@ -127,7 +127,7 @@ Write-Output "Starting Maester automation runbook at $(Get-Date -Format 'u')"
 
 Import-Module Az.Accounts -Force
 Import-Module Microsoft.Graph.Authentication -Force
-Import-Module Maester -Force
+Import-Module Maester -RequiredVersion '2.2.0' -Force
 Import-Module Pester -Force
 
 Connect-AzAccount -Identity | Out-Null
@@ -333,9 +333,11 @@ if (-not $MailRecipient) {
 $tempRoot = Join-Path -Path $env:TEMP -ChildPath ("maester-{0}" -f (Get-Date -Format 'yyyyMMddHHmmss'))
 New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
 
-$maesterModule = Get-Module -Name Maester -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+$maesterModule = Get-Module -Name Maester -ListAvailable |
+  Where-Object { $_.Version -eq [version]'2.2.0' } |
+  Select-Object -First 1
 if (-not $maesterModule) {
-  throw 'Maester module was not found after import.'
+  throw 'Maester module version 2.2.0 was not found after import.'
 }
 
 $moduleRoot = Split-Path -Path $maesterModule.Path -Parent

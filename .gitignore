@@ -1,3 +1,7 @@
-﻿# Ignore the .resources folder
+# Ignore the .resources folder
 .resources/
+.azure/
+reports/
+test-results/
+*.local.json
 /*/outputs/*.md

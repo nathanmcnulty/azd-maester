@@ -92,7 +92,6 @@ var runtimeEnvironmentName = 'PowerShell-74-Maester'
 var resourceSuffix = toLower(uniqueString(resourceGroup().id, environmentName))
 var storageAccountName = 'stmaester${resourceSuffix}'
 var storageBlobDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
-var websiteContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'de139f84-1756-47ae-9be6-808fbbe84772')
 var appServicePlanName = 'asp-${toLower(environmentName)}'
 var webAppName = 'app-maester-${resourceSuffix}'
 var includeWebApp = toLower(includeWebAppOption) == 'true'
@@ -148,65 +147,21 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   ]
 }
 
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = if (includeWebApp) {
-  name: appServicePlanName
-  location: location
-  tags: resourceTags
-  sku: {
-    name: webAppSkuName
-    capacity: 1
-  }
-  kind: 'linux'
-  properties: {
-    reserved: true
-  }
-  dependsOn: [
-    automationAccount
-  ]
-}
-
-resource webApp 'Microsoft.Web/sites@2023-12-01' = if (includeWebApp) {
-  name: webAppName
-  location: location
-  tags: resourceTags
-  kind: 'app,linux'
-  identity: {
-    type: 'SystemAssigned'
-  }
-  properties: {
-    serverFarmId: appServicePlan.id
-    httpsOnly: true
-    siteConfig: {
-      linuxFxVersion: 'NODE|22-lts'
-      appCommandLine: 'pm2 serve /home/site/wwwroot --no-daemon --spa'
-      ftpsState: 'Disabled'
-      appSettings: [
-        {
-          name: 'STORAGE_ACCOUNT_NAME'
-          value: storageAccount.name
-        }
-        {
-          name: 'DASHBOARD_BLOB_PATH'
-          value: 'latest/latest.html'
-        }
-      ]
-    }
-  }
-}
-
-resource webAppScmBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = if (includeWebApp) {
-  name: 'scm'
-  parent: webApp
-  properties: {
-    allow: false
-  }
-}
-
-resource webAppFtpBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = if (includeWebApp) {
-  name: 'ftp'
-  parent: webApp
-  properties: {
-    allow: false
+module maesterWebApp './vendor/Azd.MaesterReportWebApp/maester-report-webapp.bicep' = if (includeWebApp) {
+  name: 'maester-report-webapp'
+  params: {
+    location: location
+    environmentName: environmentName
+    solutionName: 'automation-account'
+    appServicePlanName: appServicePlanName
+    webAppName: webAppName
+    storageAccountName: storageAccount.name
+    webAppSkuName: webAppSkuName
+    customTags: resourceTags
+    enableResourceLocks: enableResourceLocks
+    systemAssignedIdentity: true
+    publisherPrincipalId: automationAccount.identity.principalId
+    publisherResourceId: automationAccount.id
   }
 }
 
@@ -285,16 +240,6 @@ resource automationStorageBlobContributor 'Microsoft.Authorization/roleAssignmen
   }
 }
 
-resource automationWebAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (includeWebApp) {
-  name: guid(webApp.id, automationAccount.id, 'WebsiteContributor')
-  scope: webApp
-  properties: {
-    roleDefinitionId: websiteContributorRoleId
-    principalId: automationAccount.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 resource storageDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (enableResourceLocks) {
   name: 'lock-cannot-delete-storage'
   scope: storageAccount
@@ -310,15 +255,6 @@ resource automationDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (e
   properties: {
     level: 'CanNotDelete'
     notes: 'Prevents accidental deletion of Maester automation resources.'
-  }
-}
-
-resource webAppDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (includeWebApp && enableResourceLocks) {
-  name: 'lock-cannot-delete-webapp'
-  scope: webApp
-  properties: {
-    level: 'CanNotDelete'
-    notes: 'Prevents accidental deletion of Maester web app resources.'
   }
 }
 
@@ -351,7 +287,7 @@ resource runtimePackageMaester 'Microsoft.Automation/automationAccounts/runtimeE
   parent: runtime74
   properties: {
     contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/Maester'
+      uri: 'https://www.powershellgallery.com/api/v2/package/Maester/2.2.0'
     }
   }
 }
@@ -426,8 +362,8 @@ resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2024-10-23' =
     logVerbose: false
     description: 'Runbook to execute Maester report workflow'
     publishContentLink: {
-      uri: 'https://raw.githubusercontent.com/maester365/maester/main/powershell/public/Invoke-Maester.ps1'
-      version: '1.0.0'
+      uri: 'https://raw.githubusercontent.com/maester365/maester/2.2.0/powershell/public/Invoke-Maester.ps1'
+      version: '2.2.0'
     }
     runtimeEnvironment: runtime74.name
   }
@@ -509,7 +445,7 @@ resource variableWebAppName 'Microsoft.Automation/automationAccounts/variables@2
   properties: {
     description: 'Optional Web App name for publishing latest Maester dashboard as default content'
     isEncrypted: false
-    value: '"${webApp.name}"'
+    value: '"${webAppName}"'
   }
 }
 
@@ -556,5 +492,5 @@ resource jobSchedule 'Microsoft.Automation/automationAccounts/jobSchedules@2023-
 output automationAccountName string = automationAccount.name
 output automationPrincipalId string = automationAccount.identity.principalId
 output storageAccountName string = storageAccount.name
-output webAppName string = includeWebApp ? webApp.name : ''
-output webAppDefaultHostName string = includeWebApp ? webApp!.properties.defaultHostName : ''
+output webAppName string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output webAppDefaultHostName string = includeWebApp ? maesterWebApp!.outputs.webAppDefaultHostName : ''

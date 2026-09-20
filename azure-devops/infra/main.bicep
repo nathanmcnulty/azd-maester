@@ -175,59 +175,21 @@ resource storageManagementPolicy 'Microsoft.Storage/storageAccounts/managementPo
   }
 }
 
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = if (includeWebApp) {
-  name: appServicePlanName
-  location: location
-  tags: resourceTags
-  sku: {
-    name: webAppSkuName
-    capacity: 1
-  }
-  kind: 'linux'
-  properties: {
-    reserved: true
-  }
-}
-
-resource webApp 'Microsoft.Web/sites@2023-12-01' = if (includeWebApp) {
-  name: webAppName
-  location: location
-  tags: resourceTags
-  kind: 'app,linux'
-  properties: {
-    serverFarmId: appServicePlan.id
-    httpsOnly: true
-    siteConfig: {
-      linuxFxVersion: 'NODE|22-lts'
-      appCommandLine: 'pm2 serve /home/site/wwwroot --no-daemon --spa'
-      ftpsState: 'Disabled'
-      appSettings: [
-        {
-          name: 'STORAGE_ACCOUNT_NAME'
-          value: storageAccount.name
-        }
-        {
-          name: 'DASHBOARD_BLOB_PATH'
-          value: 'latest/latest.html'
-        }
-      ]
-    }
-  }
-}
-
-resource webAppScmBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = if (includeWebApp) {
-  name: 'scm'
-  parent: webApp
-  properties: {
-    allow: false
-  }
-}
-
-resource webAppFtpBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = if (includeWebApp) {
-  name: 'ftp'
-  parent: webApp
-  properties: {
-    allow: false
+module maesterWebApp './vendor/Azd.MaesterReportWebApp/maester-report-webapp.bicep' = if (includeWebApp) {
+  name: 'maester-report-webapp'
+  params: {
+    location: location
+    environmentName: environmentName
+    solutionName: 'azure-devops'
+    appServicePlanName: appServicePlanName
+    webAppName: webAppName
+    storageAccountName: storageAccount.name
+    webAppSkuName: webAppSkuName
+    customTags: resourceTags
+    enableResourceLocks: enableResourceLocks
+    systemAssignedIdentity: false
+    publisherPrincipalId: ''
+    publisherResourceId: ''
   }
 }
 
@@ -240,17 +202,8 @@ resource storageDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (enab
   }
 }
 
-resource webAppDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (includeWebApp && enableResourceLocks) {
-  name: 'lock-cannot-delete-webapp'
-  scope: webApp
-  properties: {
-    level: 'CanNotDelete'
-    notes: 'Prevents accidental deletion of Maester web app resources.'
-  }
-}
-
 output storageAccountName string = storageAccount.name
-output webAppName string = includeWebApp ? webApp.name : ''
-output webAppDefaultHostName string = includeWebApp ? webApp!.properties.defaultHostName : ''
+output webAppName string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output webAppDefaultHostName string = includeWebApp ? maesterWebApp!.outputs.webAppDefaultHostName : ''
 output azureRbacScopes string = azureRbacScopes
 output mailRecipient string = mailRecipient

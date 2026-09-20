@@ -2,7 +2,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $scriptFiles = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Include *.ps1, *.psm1 |
   Where-Object { $_.FullName -notmatch '[\\/](?:\.git|tests)[\\/]' }
 
-Import-Module (Join-Path $repoRoot 'shared\scripts\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $repoRoot 'azure-devops\scripts\vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
 
 Describe 'Azure CLI target context' {
   It 'does not mutate the global default subscription' {

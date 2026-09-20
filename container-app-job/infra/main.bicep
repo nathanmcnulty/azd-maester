@@ -101,10 +101,6 @@ var storageBlobDataContributorRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 )
-var websiteContributorRoleId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  'de139f84-1756-47ae-9be6-808fbbe84772'
-)
 var acrPullRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '7f951dda-4ed3-4680-a7ca-43fe172d538d'
@@ -384,75 +380,21 @@ resource jobStorageBlobContributor 'Microsoft.Authorization/roleAssignments@2022
 // Optional Web App
 // ──────────────────────────────────────────────
 
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = if (includeWebApp) {
-  name: appServicePlanName
-  location: location
-  tags: resourceTags
-  sku: {
-    name: webAppSkuName
-    capacity: 1
-  }
-  kind: 'linux'
-  properties: {
-    reserved: true
-  }
-  dependsOn: [
-    containerAppJob
-  ]
-}
-
-resource webApp 'Microsoft.Web/sites@2023-12-01' = if (includeWebApp) {
-  name: webAppName
-  location: location
-  tags: resourceTags
-  kind: 'app,linux'
-  identity: {
-    type: 'SystemAssigned'
-  }
-  properties: {
-    serverFarmId: appServicePlan.id
-    httpsOnly: true
-    siteConfig: {
-      linuxFxVersion: 'NODE|22-lts'
-      appCommandLine: 'pm2 serve /home/site/wwwroot --no-daemon --spa'
-      ftpsState: 'Disabled'
-      appSettings: [
-        {
-          name: 'STORAGE_ACCOUNT_NAME'
-          value: storageAccount.name
-        }
-        {
-          name: 'DASHBOARD_BLOB_PATH'
-          value: 'latest/latest.html'
-        }
-      ]
-    }
-  }
-}
-
-resource webAppScmBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = if (includeWebApp) {
-  name: 'scm'
-  parent: webApp
-  properties: {
-    allow: false
-  }
-}
-
-resource webAppFtpBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = if (includeWebApp) {
-  name: 'ftp'
-  parent: webApp
-  properties: {
-    allow: false
-  }
-}
-
-resource jobWebAppContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (includeWebApp) {
-  name: guid(webApp.id, containerAppJob.id, 'WebsiteContributor')
-  scope: webApp
-  properties: {
-    roleDefinitionId: websiteContributorRoleId
-    principalId: containerAppJob.identity.principalId
-    principalType: 'ServicePrincipal'
+module maesterWebApp './vendor/Azd.MaesterReportWebApp/maester-report-webapp.bicep' = if (includeWebApp) {
+  name: 'maester-report-webapp'
+  params: {
+    location: location
+    environmentName: environmentName
+    solutionName: 'container-app-job'
+    appServicePlanName: appServicePlanName
+    webAppName: webAppName
+    storageAccountName: storageAccount.name
+    webAppSkuName: webAppSkuName
+    customTags: resourceTags
+    enableResourceLocks: enableResourceLocks
+    systemAssignedIdentity: true
+    publisherPrincipalId: containerAppJob.identity.principalId
+    publisherResourceId: containerAppJob.id
   }
 }
 
@@ -478,15 +420,6 @@ resource environmentDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (
   }
 }
 
-resource webAppDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (includeWebApp && enableResourceLocks) {
-  name: 'lock-cannot-delete-webapp'
-  scope: webApp
-  properties: {
-    level: 'CanNotDelete'
-    notes: 'Prevents accidental deletion of Maester web app resources.'
-  }
-}
-
 // ──────────────────────────────────────────────
 // Outputs
 // ──────────────────────────────────────────────
@@ -497,5 +430,5 @@ output storageAccountName string = storageAccount.name
 output managedEnvironmentName string = managedEnvironment.name
 output acrName string = includeACR ? acr.name : ''
 output acrLoginServer string = includeACR ? acr!.properties.loginServer : ''
-output webAppName string = includeWebApp ? webApp.name : ''
-output webAppDefaultHostName string = includeWebApp ? webApp!.properties.defaultHostName : ''
+output webAppName string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output webAppDefaultHostName string = includeWebApp ? maesterWebApp!.outputs.webAppDefaultHostName : ''

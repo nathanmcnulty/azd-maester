@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.40.2.10011",
-      "templateHash": "2623212812268008982"
+      "version": "0.46.1.21595",
+      "templateHash": "10969028926661021508"
     }
   },
   "parameters": {
@@ -147,7 +147,6 @@
     "hostingPlanName": "[format('plan-{0}', toLower(parameters('environmentName')))]",
     "functionAppName": "[format('func-maester-{0}', substring(variables('resourceSuffix'), 0, 12))]",
     "storageBlobDataContributorRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
-    "websiteContributorRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'de139f84-1756-47ae-9be6-808fbbe84772')]",
     "appServicePlanName": "[format('asp-{0}', toLower(parameters('environmentName')))]",
     "webAppName": "[format('app-maester-{0}', variables('resourceSuffix'))]",
     "includeWebApp": "[equals(toLower(parameters('includeWebAppOption')), 'true')]",
@@ -329,100 +328,6 @@
       ]
     },
     {
-      "condition": "[variables('includeWebApp')]",
-      "type": "Microsoft.Web/serverfarms",
-      "apiVersion": "2023-12-01",
-      "name": "[variables('appServicePlanName')]",
-      "location": "[parameters('location')]",
-      "tags": "[variables('resourceTags')]",
-      "sku": {
-        "name": "[parameters('webAppSkuName')]",
-        "capacity": 1
-      },
-      "kind": "linux",
-      "properties": {
-        "reserved": true
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('includeWebApp')]",
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2023-12-01",
-      "name": "[variables('webAppName')]",
-      "location": "[parameters('location')]",
-      "tags": "[variables('resourceTags')]",
-      "kind": "app,linux",
-      "identity": {
-        "type": "SystemAssigned"
-      },
-      "properties": {
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
-        "httpsOnly": true,
-        "siteConfig": {
-          "linuxFxVersion": "NODE|22-lts",
-          "appCommandLine": "pm2 serve /home/site/wwwroot --no-daemon --spa",
-          "ftpsState": "Disabled",
-          "appSettings": [
-            {
-              "name": "STORAGE_ACCOUNT_NAME",
-              "value": "[variables('storageAccountName')]"
-            },
-            {
-              "name": "DASHBOARD_BLOB_PATH",
-              "value": "latest/latest.html"
-            }
-          ]
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('includeWebApp')]",
-      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
-      "apiVersion": "2023-12-01",
-      "name": "[format('{0}/{1}', variables('webAppName'), 'scm')]",
-      "properties": {
-        "allow": false
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('webAppName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('includeWebApp')]",
-      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
-      "apiVersion": "2023-12-01",
-      "name": "[format('{0}/{1}', variables('webAppName'), 'ftp')]",
-      "properties": {
-        "allow": false
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('webAppName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('includeWebApp')]",
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.Web/sites', variables('webAppName'))]",
-      "name": "[guid(resourceId('Microsoft.Web/sites', variables('webAppName')), resourceId('Microsoft.Web/sites', variables('functionAppName')), 'WebsiteContributor')]",
-      "properties": {
-        "roleDefinitionId": "[variables('websiteContributorRoleId')]",
-        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('functionAppName')), '2023-12-01', 'full').identity.principalId]",
-        "principalType": "ServicePrincipal"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]",
-        "[resourceId('Microsoft.Web/sites', variables('webAppName'))]"
-      ]
-    },
-    {
       "condition": "[parameters('enableResourceLocks')]",
       "type": "Microsoft.Authorization/locks",
       "apiVersion": "2020-05-01",
@@ -451,17 +356,271 @@
       ]
     },
     {
-      "condition": "[and(variables('includeWebApp'), parameters('enableResourceLocks'))]",
-      "type": "Microsoft.Authorization/locks",
-      "apiVersion": "2020-05-01",
-      "scope": "[resourceId('Microsoft.Web/sites', variables('webAppName'))]",
-      "name": "lock-cannot-delete-webapp",
+      "condition": "[variables('includeWebApp')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "maester-report-webapp",
       "properties": {
-        "level": "CanNotDelete",
-        "notes": "Prevents accidental deletion of Maester web app resources."
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "solutionName": {
+            "value": "function-app"
+          },
+          "appServicePlanName": {
+            "value": "[variables('appServicePlanName')]"
+          },
+          "webAppName": {
+            "value": "[variables('webAppName')]"
+          },
+          "storageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          },
+          "webAppSkuName": {
+            "value": "[parameters('webAppSkuName')]"
+          },
+          "customTags": {
+            "value": "[variables('resourceTags')]"
+          },
+          "enableResourceLocks": {
+            "value": "[parameters('enableResourceLocks')]"
+          },
+          "systemAssignedIdentity": {
+            "value": true
+          },
+          "publisherPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Web/sites', variables('functionAppName')), '2023-12-01', 'full').identity.principalId]"
+          },
+          "publisherResourceId": {
+            "value": "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "11083593288160222535"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the report web app resources."
+              }
+            },
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "azd environment name used in tags."
+              }
+            },
+            "solutionName": {
+              "type": "string",
+              "metadata": {
+                "description": "Maester solution name used in tags."
+              }
+            },
+            "appServicePlanName": {
+              "type": "string",
+              "metadata": {
+                "description": "App Service plan name."
+              }
+            },
+            "webAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Web app name."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name containing the generated report."
+              }
+            },
+            "webAppSkuName": {
+              "type": "string",
+              "defaultValue": "F1",
+              "metadata": {
+                "description": "App Service plan SKU."
+              }
+            },
+            "customTags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Additional resource tags. These override the component defaults."
+              }
+            },
+            "enableResourceLocks": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Apply delete locks to the report web app resources."
+              }
+            },
+            "systemAssignedIdentity": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Assign a system-managed identity to the report web app."
+              }
+            },
+            "publisherPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal that receives Website Contributor on the report web app. Leave empty to skip the role assignment."
+              }
+            },
+            "publisherPrincipalType": {
+              "type": "string",
+              "defaultValue": "ServicePrincipal",
+              "metadata": {
+                "description": "Principal type for the optional Website Contributor assignment."
+              }
+            },
+            "publisherResourceId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Existing publisher resource ID used to preserve the original role-assignment name."
+              }
+            }
+          },
+          "variables": {
+            "resourceTags": "[union(createObject('workload', 'maester', 'solution', parameters('solutionName'), 'environment', toLower(parameters('environmentName')), 'managedBy', 'azd'), parameters('customTags'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('appServicePlanName')]",
+              "location": "[parameters('location')]",
+              "kind": "linux",
+              "tags": "[variables('resourceTags')]",
+              "sku": {
+                "name": "[parameters('webAppSkuName')]",
+                "capacity": 1
+              },
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('webAppName')]",
+              "location": "[parameters('location')]",
+              "kind": "app,linux",
+              "tags": "[variables('resourceTags')]",
+              "identity": "[if(parameters('systemAssignedIdentity'), createObject('type', 'SystemAssigned'), null())]",
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "linuxFxVersion": "NODE|22-lts",
+                  "appCommandLine": "pm2 serve /home/site/wwwroot --no-daemon --spa",
+                  "ftpsState": "Disabled",
+                  "appSettings": [
+                    {
+                      "name": "STORAGE_ACCOUNT_NAME",
+                      "value": "[parameters('storageAccountName')]"
+                    },
+                    {
+                      "name": "DASHBOARD_BLOB_PATH",
+                      "value": "latest/latest.html"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('webAppName'), 'scm')]",
+              "properties": {
+                "allow": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('webAppName'), 'ftp')]",
+              "properties": {
+                "allow": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('publisherPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]",
+              "name": "[guid(resourceId('Microsoft.Web/sites', parameters('webAppName')), if(empty(parameters('publisherResourceId')), parameters('publisherPrincipalId'), parameters('publisherResourceId')), 'WebsiteContributor')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'de139f84-1756-47ae-9be6-808fbbe84772')]",
+                "principalId": "[parameters('publisherPrincipalId')]",
+                "principalType": "[parameters('publisherPrincipalType')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('enableResourceLocks')]",
+              "type": "Microsoft.Authorization/locks",
+              "apiVersion": "2020-05-01",
+              "scope": "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]",
+              "name": "lock-cannot-delete-webapp",
+              "properties": {
+                "level": "CanNotDelete",
+                "notes": "Protect the optional Maester report web app from accidental deletion."
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "webAppName": {
+              "type": "string",
+              "value": "[parameters('webAppName')]"
+            },
+            "webAppDefaultHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('webAppName')), '2023-12-01').defaultHostName]"
+            },
+            "webAppResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+            }
+          }
+        }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('webAppName'))]"
+        "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
       ]
     }
   ],
@@ -480,11 +639,11 @@
     },
     "webAppName": {
       "type": "string",
-      "value": "[if(variables('includeWebApp'), variables('webAppName'), '')]"
+      "value": "[if(variables('includeWebApp'), reference(resourceId('Microsoft.Resources/deployments', 'maester-report-webapp'), '2025-04-01').outputs.webAppName.value, '')]"
     },
     "webAppDefaultHostName": {
       "type": "string",
-      "value": "[if(variables('includeWebApp'), reference(resourceId('Microsoft.Web/sites', variables('webAppName')), '2023-12-01').defaultHostName, '')]"
+      "value": "[if(variables('includeWebApp'), reference(resourceId('Microsoft.Resources/deployments', 'maester-report-webapp'), '2025-04-01').outputs.webAppDefaultHostName.value, '')]"
     }
   }
 }

@@ -111,15 +111,31 @@ function Publish-WebAppContent {
 
 function Test-ModuleInstalled {
   param(
-    [Parameter(Mandatory = $true)][string]$ModuleName
+    [Parameter(Mandatory = $true)][string]$ModuleName,
+    [Parameter(Mandatory = $false)][string]$RequiredVersion
   )
 
-  if (Get-Module -ListAvailable -Name $ModuleName -ErrorAction SilentlyContinue) {
+  $availableModules = @(Get-Module -ListAvailable -Name $ModuleName -ErrorAction SilentlyContinue)
+  if ([string]::IsNullOrWhiteSpace($RequiredVersion) -and $availableModules.Count -gt 0) {
+    return
+  }
+  if (-not [string]::IsNullOrWhiteSpace($RequiredVersion) -and ($availableModules | Where-Object { $_.Version -eq [version]$RequiredVersion })) {
     return
   }
 
   Write-Output "Installing module '$ModuleName'..."
-  Install-Module -Name $ModuleName -Force -Scope CurrentUser -Repository PSGallery -AllowClobber -ErrorAction Stop
+  $installParams = @{
+    Name         = $ModuleName
+    Force        = $true
+    Scope        = 'CurrentUser'
+    Repository   = 'PSGallery'
+    AllowClobber = $true
+    ErrorAction  = 'Stop'
+  }
+  if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) {
+    $installParams['RequiredVersion'] = $RequiredVersion
+  }
+  Install-Module @installParams
 }
 
 # ──────────────────────────────────────────────
@@ -157,7 +173,12 @@ if ($includeTeams) {
 }
 
 foreach ($mod in $requiredModules) {
-  Test-ModuleInstalled -ModuleName $mod
+  if ($mod -eq 'Maester') {
+    Test-ModuleInstalled -ModuleName $mod -RequiredVersion '2.2.0'
+  }
+  else {
+    Test-ModuleInstalled -ModuleName $mod
+  }
 }
 
 # ──────────────────────────────────────────────
@@ -166,7 +187,7 @@ foreach ($mod in $requiredModules) {
 
 Import-Module Az.Accounts -Force -ErrorAction Stop
 Import-Module Microsoft.Graph.Authentication -Force -ErrorAction Stop
-Import-Module Maester -Force -ErrorAction Stop
+Import-Module Maester -RequiredVersion '2.2.0' -Force -ErrorAction Stop
 Import-Module Pester -Force -ErrorAction Stop
 
 Connect-AzAccount -Identity -ErrorAction Stop | Out-Null
@@ -312,9 +333,11 @@ $tempBase = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } el
 $tempRoot = Join-Path -Path $tempBase -ChildPath ("maester-{0}" -f (Get-Date -Format 'yyyyMMddHHmmss'))
 New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
 
-$maesterModule = Get-Module -Name Maester -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+$maesterModule = Get-Module -Name Maester -ListAvailable |
+  Where-Object { $_.Version -eq [version]'2.2.0' } |
+  Select-Object -First 1
 if (-not $maesterModule) {
-  throw 'Maester module was not found after import.'
+  throw 'Maester module version 2.2.0 was not found after import.'
 }
 
 $moduleRoot = Split-Path -Path $maesterModule.Path -Parent

@@ -5,6 +5,23 @@ Production-style `azd` templates for running Maester on Azure with Managed Ident
 > [!IMPORTANT]
 > This repository contains multiple deployable solutions. The repository root is an intentional catalog and guard entry point, not a deployable Maester environment: choose one solution subfolder before running `azd up`. A root-level `azd up` exits before provisioning and prints the correct folder-specific command.
 
+## Migration status
+
+The supported long-term design is now four standalone public templates:
+
+- [`azd-maester-azuredevops`](https://github.com/nathanmcnulty/azd-maester-azuredevops)
+- [`azd-maester-functionapp`](https://github.com/nathanmcnulty/azd-maester-functionapp)
+- [`azd-maester-azureautomation`](https://github.com/nathanmcnulty/azd-maester-azureautomation)
+- [`azd-maester-containerappjob`](https://github.com/nathanmcnulty/azd-maester-containerappjob)
+
+Each standalone template pins the stable Maester module `2.2.0` and vendors
+the shared hook/permission behavior and optional report web app from
+[`azd-reference`](https://github.com/nathanmcnulty/azd-reference), with exact
+component revisions and hashes in `azd-components.lock.json`.
+
+This catalog is intentionally not archived yet. It remains available during
+the migration; new deployments should use one of the standalone repositories.
+
 https://github.com/user-attachments/assets/c2781a8e-46f6-4be0-8bf2-27f3b6425748
 
 ## Solutions

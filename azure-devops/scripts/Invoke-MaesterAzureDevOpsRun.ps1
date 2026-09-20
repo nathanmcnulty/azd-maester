@@ -255,7 +255,7 @@ Write-Host 'Installing required PowerShell modules...'
 $exchangeOnlineModuleVersion = '3.9.2'
 $teamsModuleVersion = '6.9.0'
 
-Install-RequiredModule -Name 'Maester'
+Install-RequiredModule -Name 'Maester' -RequiredVersion '2.2.0'
 Install-RequiredModule -Name 'Pester'
 Install-RequiredModule -Name 'NuGet'
 Install-RequiredModule -Name 'PackageManagement'
@@ -280,7 +280,7 @@ if ($includeTeamsBool) {
   Import-Module MicrosoftTeams -RequiredVersion $teamsModuleVersion -Force
 }
 Import-Module Microsoft.Graph.Authentication -Force
-Import-Module Maester -Force
+Import-Module Maester -RequiredVersion '2.2.0' -Force
 if ($includeWebAppBool) {
   Import-Module Az.Websites -ErrorAction SilentlyContinue
 }
@@ -479,13 +479,36 @@ if (-not (Test-Path -Path $outputFolder)) {
   New-Item -Path $outputFolder -ItemType Directory -Force | Out-Null
 }
 
-$testsRoot = Join-Path -Path $workingDirectory -ChildPath 'tests'
-if (-not (Test-Path -Path $testsRoot)) {
-  New-Item -Path $testsRoot -ItemType Directory -Force | Out-Null
+$maesterModule = Get-Module -Name Maester -ListAvailable |
+  Where-Object { $_.Version -eq [version]'2.2.0' } |
+  Select-Object -First 1
+if (-not $maesterModule) {
+  throw 'Maester module version 2.2.0 was not found after installation.'
 }
 
-Write-Host 'Downloading latest Maester tests...'
-Install-MaesterTests $testsRoot
+$moduleRoot = Split-Path -Path $maesterModule.Path -Parent
+$testsCandidates = @(
+  (Join-Path -Path $moduleRoot -ChildPath 'maester-tests')
+  (Join-Path -Path $moduleRoot -ChildPath 'tests')
+)
+$testsRoot = $null
+foreach ($candidate in $testsCandidates) {
+  if (-not (Test-Path -Path $candidate -PathType Container)) {
+    continue
+  }
+
+  $testFile = Get-ChildItem -Path $candidate -Recurse -Filter '*.Tests.ps1' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($testFile) {
+    $testsRoot = $candidate
+    break
+  }
+}
+
+if (-not $testsRoot) {
+  throw "Could not locate the embedded Maester 2.2.0 tests under module path '$moduleRoot'."
+}
+
+Write-Host "Using embedded Maester 2.2.0 tests from '$testsRoot'."
 
 $resultsXmlPath = Join-Path -Path $outputFolder -ChildPath 'test-results.xml'
 $latestHtmlPath = Join-Path -Path $outputFolder -ChildPath 'latest.html'

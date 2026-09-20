@@ -6,7 +6,7 @@ SHELL ["pwsh", "-Command"]
 RUN Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
 RUN Install-Module -Name Az.Accounts -Force -Scope AllUsers
 RUN Install-Module -Name Microsoft.Graph.Authentication -Force -Scope AllUsers
-RUN Install-Module -Name Maester -Force -Scope AllUsers
+RUN Install-Module -Name Maester -RequiredVersion 2.2.0 -Force -Scope AllUsers
 RUN Install-Module -Name Pester -Force -Scope AllUsers
 RUN Install-Module -Name ExchangeOnlineManagement -Force -Scope AllUsers
 RUN Install-Module -Name MicrosoftTeams -Force -Scope AllUsers

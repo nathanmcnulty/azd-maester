@@ -1,0 +1,66 @@
+{
+  "manifestVersion": "1.0",
+  "components": [
+    {
+      "id": "maester-azd-hooks",
+      "version": "0.1.0",
+      "sourceRepository": "https://github.com/nathanmcnulty/azd-reference",
+      "sourceRevision": "f25d86d86bed00018aa17f39bf2f8e4d0a9f7327",
+      "files": [
+        {
+          "source": "components/powershell/maester-azd-hooks/Get-ManagedIdentityPrincipal.ps1",
+          "target": "scripts/vendor/Azd.MaesterHooks/Get-ManagedIdentityPrincipal.ps1",
+          "sha256": "deec3e1acbf30abf932b6ffd932634e38f7738682d0d009d31bbf49292436e27"
+        },
+        {
+          "source": "components/powershell/maester-azd-hooks/Grant-MaesterGraphPermissions.ps1",
+          "target": "scripts/vendor/Azd.MaesterHooks/Grant-MaesterGraphPermissions.ps1",
+          "sha256": "e43b6e4ce60c9adef30355cc126519e5f754c01630c94fca9d85c04aebde3548"
+        },
+        {
+          "source": "components/powershell/maester-azd-hooks/Maester-Helpers.psm1",
+          "target": "scripts/vendor/Azd.MaesterHooks/Maester-Helpers.psm1",
+          "sha256": "7c173a221bbe25c9719a2bdf492c1e21d1d3b0811e49b861160fdf877087e09e"
+        },
+        {
+          "source": "components/powershell/maester-azd-hooks/Maester-PreDownCleanup.psm1",
+          "target": "scripts/vendor/Azd.MaesterHooks/Maester-PreDownCleanup.psm1",
+          "sha256": "d1f4e42a08a9e5c71b8dd98f939de2f1b92b74063c66e79a21e701a2f857373d"
+        },
+        {
+          "source": "components/powershell/maester-azd-hooks/Maester-PreProvision.psm1",
+          "target": "scripts/vendor/Azd.MaesterHooks/Maester-PreProvision.psm1",
+          "sha256": "5d41430342a6a31651d89d094633768142eb00d31918eda46a88ffc876ceb929"
+        },
+        {
+          "source": "components/powershell/maester-azd-hooks/Maester-PreUp.psm1",
+          "target": "scripts/vendor/Azd.MaesterHooks/Maester-PreUp.psm1",
+          "sha256": "d023caf7ff76db2feedbf5aae22111b92cbdf57b530e6e2590d346a0609f2f71"
+        },
+        {
+          "source": "components/powershell/maester-azd-hooks/Maester-SetupHelpers.psm1",
+          "target": "scripts/vendor/Azd.MaesterHooks/Maester-SetupHelpers.psm1",
+          "sha256": "4fda1815be3febe01e620c8f2a138167e631d3c46f970d901f30262579269950"
+        },
+        {
+          "source": "components/powershell/maester-azd-hooks/Maester-UpWizard.psm1",
+          "target": "scripts/vendor/Azd.MaesterHooks/Maester-UpWizard.psm1",
+          "sha256": "31ee7dabbc84e335e3066dbc05e33aa74779029d83455dd65ba49ed28bd79cb8"
+        }
+      ]
+    },
+    {
+      "id": "maester-report-webapp",
+      "version": "0.1.1",
+      "sourceRepository": "https://github.com/nathanmcnulty/azd-reference",
+      "sourceRevision": "79f0608c672639aae0f0ed96d160b1eb17cfc08f",
+      "files": [
+        {
+          "source": "components/bicep/maester-report-webapp/maester-report-webapp.bicep",
+          "target": "infra/vendor/Azd.MaesterReportWebApp/maester-report-webapp.bicep",
+          "sha256": "4b12708c76489f3f20e031fdafc706a3062276ef4a83fda7f5109f4cbd902972"
+        }
+      ]
+    }
+  ]
+}

@@ -135,7 +135,18 @@ if ($Plan -eq 'FC1') {
   foreach ($moduleName in $modulesToBundle) {
     Write-Host "Saving module '$moduleName' to bundle..."
     try {
-      Save-Module -Name $moduleName -Path $modulesPath -Repository PSGallery -Force -AcceptLicense -ErrorAction Stop
+      $saveParams = @{
+        Name          = $moduleName
+        Path          = $modulesPath
+        Repository    = 'PSGallery'
+        Force         = $true
+        AcceptLicense = $true
+        ErrorAction   = 'Stop'
+      }
+      if ($moduleName -eq 'Maester') {
+        $saveParams['RequiredVersion'] = '2.2.0'
+      }
+      Save-Module @saveParams
       Write-Host "  Saved '$moduleName'." -ForegroundColor Green
     } catch {
       Write-Warning "  Failed to save module '${moduleName}': $($_.Exception.Message)"

@@ -1,0 +1,639 @@
+# Shared setup helper functions for azd-maester solutions
+# Imported by azd hook scripts and Setup-PostDeploy.ps1 in each solution.
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+
+function Test-CanPrompt {
+  try {
+    $null = $Host.UI.RawUI
+    return $true
+  }
+  catch {
+    return $false
+  }
+}
+
+function ConvertTo-BoolOrDefault {
+  param(
+    [Parameter(Mandatory = $false)]
+    [string]$Value,
+    [Parameter(Mandatory = $true)]
+    [bool]$Default
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $Default
+  }
+
+  switch ($Value.Trim().ToLower()) {
+    'true' { return $true }
+    'false' { return $false }
+    default { return $Default }
+  }
+}
+
+function Test-ModuleAvailable {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$ModuleName,
+    [Parameter(Mandatory = $false)]
+    [string]$InstallMessage
+  )
+
+  $available = Get-Module -ListAvailable -Name $ModuleName | Select-Object -First 1
+  if ($available) {
+    Import-Module $ModuleName -Force
+    return $true
+  }
+
+  if (-not (Test-CanPrompt)) {
+    Write-Warning "$ModuleName is not installed and this is a non-interactive session."
+    return $false
+  }
+
+  if ($InstallMessage) {
+    Write-Host $InstallMessage
+  }
+
+  $installChoice = Read-Host "Install PowerShell module '$ModuleName' now? (Y/N)"
+  if (-not $installChoice -or $installChoice.Trim().ToUpper() -ne 'Y') {
+    return $false
+  }
+
+  Install-Module -Name $ModuleName -Scope CurrentUser -Force -AllowClobber
+  Import-Module $ModuleName -Force
+  return $true
+}
+
+function Resolve-StepFailureAction {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$StepName,
+    [Parameter(Mandatory = $true)]
+    [string]$Message
+  )
+
+  Write-Warning ("{0} failed: {1}" -f $StepName, $Message)
+
+  $failureActionOverride = $env:MAESTER_STEP_FAILURE_ACTION
+  if (-not [string]::IsNullOrWhiteSpace($failureActionOverride)) {
+    switch ($failureActionOverride.Trim().ToLowerInvariant()) {
+      'stop' {
+        Write-Warning "MAESTER_STEP_FAILURE_ACTION=Stop. Failing setup on '$StepName'."
+        return 'Stop'
+      }
+      'skip' {
+        Write-Warning "MAESTER_STEP_FAILURE_ACTION=Skip. Skipping '$StepName'."
+        return 'Skip'
+      }
+    }
+  }
+
+  if (-not (Test-CanPrompt)) {
+    Write-Warning "Non-interactive session detected. Skipping $StepName and continuing."
+    return 'Skip'
+  }
+
+  Write-Host "Choose how to proceed after failure in '$StepName':"
+  Write-Host '  [S] Stop setup (recommended if you need the feature enabled)'
+  Write-Host '  [K] Skip this step and continue'
+  $choice = Read-Host 'Enter S or K (default: K)'
+  if ($choice -and $choice.Trim().ToUpper() -eq 'S') {
+    return 'Stop'
+  }
+
+  return 'Skip'
+}
+
+# ── azd env helpers ──────────────────────────────────────────────────────────
+
+function Set-AzdEnvValue {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Name,
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyString()]
+    [string]$Value
+  )
+
+  try {
+    & azd env set $Name $Value | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "Failed to persist $Name to azd environment."
+    }
+  }
+  catch {
+    Write-Warning "Failed to persist $Name to azd environment. Error: $($_.Exception.Message)"
+  }
+}
+
+function Set-AzdEnvJsonArray {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Name,
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyCollection()]
+    [string[]]$Values = @()
+  )
+
+  $serialized = (@($Values) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique) -join ';'
+  Set-AzdEnvValue -Name $Name -Value $serialized
+}
+
+# ── Authentication helpers ────────────────────────────────────────────────────
+
+function Get-AzCliSubscriptionContext {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$SubscriptionId,
+    [Parameter(Mandatory = $false)]
+    [string]$TenantId
+  )
+
+  $accountsJson = (& az account list -o json 2>$null)
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accountsJson)) {
+    throw 'Not authenticated. Run: azd auth login'
+  }
+
+  $account = @($accountsJson | ConvertFrom-Json) |
+    Where-Object { $_.id -ieq $SubscriptionId } |
+    Select-Object -First 1
+  if (-not $account) {
+    throw "Subscription '$SubscriptionId' is not available in the current Azure CLI login."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($TenantId) -and $account.tenantId -ine $TenantId) {
+    throw "Subscription '$SubscriptionId' belongs to tenant '$($account.tenantId)', not selected tenant '$TenantId'."
+  }
+
+  return $account
+}
+
+function Get-AzCliAccessToken {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Resource,
+    [Parameter(Mandatory = $false)]
+    [string]$TenantId
+  )
+
+  try {
+    $tokenArgs = @('account', 'get-access-token', '--resource', $Resource, '-o', 'json')
+    if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+      $tokenArgs += @('--tenant', $TenantId)
+    }
+
+    $tokenJson = (& az @tokenArgs 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $tokenJson) {
+      $tokenData = $tokenJson | ConvertFrom-Json
+      if ($tokenData.accessToken) {
+        return $tokenData.accessToken
+      }
+    }
+  }
+  catch {
+    Write-Verbose "az cli token acquisition failed for ${Resource}: $($_.Exception.Message)"
+  }
+
+  return $null
+}
+
+function Get-GraphAccessToken {
+  param(
+    [Parameter(Mandatory = $false)]
+    [string]$TenantId,
+    [Parameter(Mandatory = $false)]
+    [string[]]$Scopes = @(),
+    [Parameter(Mandatory = $false)]
+    [bool]$AllowInteractiveLogin = $true
+  )
+
+  $token = Get-AzCliAccessToken -Resource 'https://graph.microsoft.com' -TenantId $TenantId
+  if ($token) {
+    return $token
+  }
+
+  if ($AllowInteractiveLogin) {
+    Confirm-AzureLogin -TenantId $TenantId
+    $token = Get-AzCliAccessToken -Resource 'https://graph.microsoft.com' -TenantId $TenantId
+    if ($token) {
+      return $token
+    }
+  }
+
+  $scopeText = if ($Scopes -and $Scopes.Count -gt 0) { $Scopes -join ', ' } else { 'default Graph scopes' }
+  throw "Microsoft Graph token acquisition failed (requested: $scopeText). Ensure Azure login is active and has Graph permissions."
+}
+
+function Invoke-GraphRestRequest {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('GET', 'POST', 'PUT', 'PATCH', 'DELETE')]
+    [string]$Method,
+    [Parameter(Mandatory = $true)]
+    [string]$Uri,
+    [Parameter(Mandatory = $false)]
+    $Body,
+    [Parameter(Mandatory = $false)]
+    [string]$ContentType = 'application/json',
+    [Parameter(Mandatory = $false)]
+    [string]$TenantId
+  )
+
+  $token = Get-GraphAccessToken -TenantId $TenantId
+  $headers = @{
+    Authorization = "Bearer $token"
+  }
+
+  $invokeParams = @{
+    Method  = $Method
+    Uri     = $Uri
+    Headers = $headers
+  }
+
+  if ($PSBoundParameters.ContainsKey('Body') -and $null -ne $Body) {
+    $payload = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 20 }
+    $invokeParams['Body'] = $payload
+    $invokeParams['ContentType'] = $ContentType
+  }
+
+  $responseStatus = 0
+  $response = Invoke-RestMethod @invokeParams -SkipHttpErrorCheck -StatusCodeVariable responseStatus
+
+  if ($responseStatus -ge 400) {
+    $errorMessage = $null
+    if ($response -and $response.error -and $response.error.message) {
+      $errorMessage = [string]$response.error.message
+    }
+    elseif ($response -is [string] -and -not [string]::IsNullOrWhiteSpace($response)) {
+      $errorMessage = $response
+    }
+
+    if ([string]::IsNullOrWhiteSpace($errorMessage)) {
+      $errorMessage = 'No response content.'
+    }
+
+    throw "Microsoft Graph request failed. HTTP ${responseStatus}: $errorMessage"
+  }
+
+  return $response
+}
+
+function Assert-GraphAccess {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$TenantId,
+    [Parameter(Mandatory = $false)]
+    [string[]]$Scopes = @()
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+    $script:MaesterGraphTenantId = $TenantId
+  }
+
+  try {
+    Invoke-GraphRestRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=id&$top=1' -TenantId $script:MaesterGraphTenantId | Out-Null
+  }
+  catch {
+    $scopeText = if ($Scopes -and $Scopes.Count -gt 0) { $Scopes -join ', ' } else { 'default Graph scopes' }
+    throw "Microsoft Graph access check failed for tenant '$TenantId' (requested: $scopeText). Ensure Azure login is active and has Graph permissions. Error: $($_.Exception.Message)"
+  }
+}
+
+function global:Invoke-MgGraphRequest {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('GET', 'POST', 'PUT', 'PATCH', 'DELETE')]
+    [string]$Method,
+    [Parameter(Mandatory = $true)]
+    [string]$Uri,
+    [Parameter(Mandatory = $false)]
+    $Body,
+    [Parameter(Mandatory = $false)]
+    [string]$ContentType = 'application/json'
+  )
+
+  return Invoke-GraphRestRequest -Method $Method -Uri $Uri -Body $Body -ContentType $ContentType -TenantId $script:MaesterGraphTenantId
+}
+
+function Connect-MgGraphSilent {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$TenantId,
+    [Parameter(Mandatory = $false)]
+    [string[]]$Scopes = @()
+  )
+
+  Assert-GraphAccess -TenantId $TenantId -Scopes $Scopes
+}
+
+function Connect-ExchangeOnlineSilent {
+  param(
+    [Parameter(Mandatory = $false)]
+    [string]$Organization
+  )
+
+  $token = Get-AzCliAccessToken -Resource 'https://outlook.office365.com'
+  if ($token) {
+    $connectArgs = @{
+      AccessToken = $token
+      ShowBanner  = $false
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Organization)) {
+      $connectArgs['Organization'] = $Organization
+    }
+    Connect-ExchangeOnline @connectArgs | Out-Null
+    return
+  }
+
+  Write-Verbose 'az cli token not available for Exchange Online. Falling back to interactive auth.'
+  $connectArgs = @{
+    ShowBanner = $false
+    DisableWAM = $true
+  }
+  if (-not [string]::IsNullOrWhiteSpace($Organization)) {
+    $connectArgs['Organization'] = $Organization
+  }
+  Connect-ExchangeOnline @connectArgs | Out-Null
+}
+
+function Confirm-AzureLogin {
+  param([Parameter(Mandatory = $false)][string]$TenantId)
+
+  try {
+    $tokenArgs = @('account', 'get-access-token', '--resource', 'https://graph.microsoft.com', '--output', 'none')
+    if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+      $tokenArgs += @('--tenant', $TenantId)
+    }
+    $null = & az @tokenArgs 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      return
+    }
+  }
+  catch {
+  }
+
+  Write-Host 'No active Azure CLI login detected. Opening Azure login...'
+  $loginArgs = @('login')
+  if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+    $loginArgs += @('--tenant', $TenantId)
+  }
+  & az @loginArgs | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Azure login failed.'
+  }
+}
+
+function Select-AzureRbacScopes {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$DefaultSubscriptionId,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ResourceTypeName = 'managed identity'
+  )
+
+  if (-not (Test-CanPrompt)) {
+    Write-Warning "-IncludeAzure was specified but interactive prompting is not available. Defaulting Azure RBAC scope to subscription '/subscriptions/$DefaultSubscriptionId'."
+    return @("/subscriptions/$DefaultSubscriptionId")
+  }
+
+  $items = @()
+
+  try {
+    $mgJson = & az account management-group list -o json 2>$null
+    if ($LASTEXITCODE -eq 0 -and $mgJson) {
+      $mgs = $mgJson | ConvertFrom-Json
+      foreach ($mg in @($mgs)) {
+        $mgName = if ($mg.name) { $mg.name } elseif ($mg.id -and ($mg.id -split '/')[-1]) { ($mg.id -split '/')[-1] } else { $null }
+        if (-not $mgName) { continue }
+        $mgDisplayName = if ($mg.displayName) { $mg.displayName } else { $mgName }
+        $items += [pscustomobject]@{
+          Label = "MG  | $mgDisplayName ($mgName)"
+          Scope = "/providers/Microsoft.Management/managementGroups/$mgName"
+        }
+      }
+    }
+  }
+  catch {
+  }
+
+  $subsJson = az account list --query "[].{name:name,id:id,isDefault:isDefault}" -o json
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Failed to enumerate subscriptions for Azure scope selection.'
+  }
+
+  $subs = $subsJson | ConvertFrom-Json
+  foreach ($sub in @($subs)) {
+    $items += [pscustomobject]@{
+      Label = "SUB | $($sub.name) ($($sub.id))"
+      Scope = "/subscriptions/$($sub.id)"
+    }
+  }
+
+  if ($items.Count -eq 0) {
+    Write-Warning "No management groups or subscriptions were discovered. Defaulting Azure RBAC scope to subscription '/subscriptions/$DefaultSubscriptionId'."
+    return @("/subscriptions/$DefaultSubscriptionId")
+  }
+
+  Write-Host "Select one or more Azure RBAC scopes to grant the $ResourceTypeName Reader access."
+  Write-Host 'Enter one or more numbers separated by commas. Press Enter to use the current subscription.'
+  for ($index = 0; $index -lt $items.Count; $index++) {
+    Write-Host ("[{0}] {1}" -f ($index + 1), $items[$index].Label)
+  }
+
+  $selection = Read-Host 'Selection'
+  if ([string]::IsNullOrWhiteSpace($selection)) {
+    return @("/subscriptions/$DefaultSubscriptionId")
+  }
+
+  $selectedScopes = @()
+  $parts = @($selection -split ',' | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  foreach ($part in $parts) {
+    $value = 0
+    if (-not [int]::TryParse($part, [ref]$value)) {
+      throw "Invalid selection '$part'. Expected a number or comma-separated numbers."
+    }
+
+    $selectedIndex = $value - 1
+    if ($selectedIndex -lt 0 -or $selectedIndex -ge $items.Count) {
+      throw "Selection '$value' is out of range."
+    }
+
+    $selectedScopes += $items[$selectedIndex].Scope
+  }
+
+  return @($selectedScopes | Sort-Object -Unique)
+}
+
+# ── Graph / Azure RBAC assignment helpers ────────────────────────────────────
+
+function Grant-ServicePrincipalAppRoleAssignment {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$PrincipalObjectId,
+    [Parameter(Mandatory = $true)]
+    [string]$ResourceAppId,
+    [Parameter(Mandatory = $true)]
+    [Guid]$AppRoleId
+  )
+
+  $spResponse = Invoke-MgGraphRequest -Method GET -Uri ("https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '{0}'&`$select=id" -f $ResourceAppId)
+  if (-not $spResponse.value -or $spResponse.value.Count -eq 0) {
+    throw "Service principal for resource appId '$ResourceAppId' was not found in this tenant."
+  }
+
+  $resourceSpId = $spResponse.value[0].id
+  $existing = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments"
+  $match = @($existing.value | Where-Object { $_.resourceId -eq $resourceSpId -and $_.appRoleId -eq $AppRoleId }) | Select-Object -First 1
+  if ($match) {
+    return $null
+  }
+
+  $body = @{
+    principalId = $PrincipalObjectId
+    resourceId  = $resourceSpId
+    appRoleId   = $AppRoleId
+  } | ConvertTo-Json
+
+  $created = Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments" -Body $body -ContentType 'application/json'
+  if ($created -and $created.id) {
+    return $created.id
+  }
+
+  return $null
+}
+
+function Get-DirectoryRoleDefinitionId {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$RoleDisplayName
+  )
+
+  $escaped = $RoleDisplayName.Replace("'", "''")
+  $defs = Invoke-MgGraphRequest -Method GET -Uri ("https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?`$filter=displayName eq '{0}'&`$select=id,displayName" -f $escaped)
+  if (-not $defs.value -or $defs.value.Count -eq 0) {
+    throw "Directory role definition '$RoleDisplayName' was not found."
+  }
+
+  return $defs.value[0].id
+}
+
+function Get-DirectoryRoleAssignmentId {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$PrincipalObjectId,
+    [Parameter(Mandatory = $true)]
+    [string]$RoleDefinitionId
+  )
+
+  $existing = Invoke-MgGraphRequest -Method GET -Uri (
+    "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?`$filter=principalId eq '{0}' and roleDefinitionId eq '{1}' and directoryScopeId eq '/'&`$select=id" -f $PrincipalObjectId, $RoleDefinitionId
+  )
+
+  if ($existing.value -and $existing.value.Count -gt 0) {
+    return $existing.value[0].id
+  }
+
+  return $null
+}
+
+function Test-DirectoryRoleAssignment {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$PrincipalObjectId,
+    [Parameter(Mandatory = $true)]
+    [string]$RoleDisplayName
+  )
+
+  $roleDefinitionId = Get-DirectoryRoleDefinitionId -RoleDisplayName $RoleDisplayName
+
+  $existingId = Get-DirectoryRoleAssignmentId -PrincipalObjectId $PrincipalObjectId -RoleDefinitionId $roleDefinitionId
+  if ($existingId) {
+    return $null
+  }
+
+  $body = @{
+    principalId      = $PrincipalObjectId
+    roleDefinitionId = $roleDefinitionId
+    directoryScopeId = '/'
+  } | ConvertTo-Json
+
+  $created = Invoke-MgGraphRequest -Method POST -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments' -Body $body -ContentType 'application/json'
+  if ($created -and $created.id) {
+    return $created.id
+  }
+
+  return $null
+}
+
+function Test-AzureReaderRoleAssignment {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Scope,
+    [Parameter(Mandatory = $true)]
+    [string]$PrincipalObjectId,
+    [Parameter(Mandatory = $true)]
+    [string]$SubscriptionId
+  )
+
+  $readerRoleGuid = 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
+  $roleDefinitionId = if ($Scope -like '/providers/Microsoft.Management/managementGroups/*') {
+    "/providers/Microsoft.Authorization/roleDefinitions/$readerRoleGuid"
+  }
+  else {
+    "/subscriptions/$SubscriptionId/providers/Microsoft.Authorization/roleDefinitions/$readerRoleGuid"
+  }
+
+  $armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
+  $armHeaders = @{ Authorization = "Bearer $armToken" }
+
+  # Pre-check: look for an existing Reader assignment for this principal at this scope
+  $existingPath = "$Scope/providers/Microsoft.Authorization/roleAssignments?`$filter=principalId eq '$PrincipalObjectId' and atScope()&api-version=2022-04-01"
+  try {
+    $existingPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$existingPath" -Headers $armHeaders
+    $existingMatch = @($existingPayload.value | Where-Object {
+        $_.properties.roleDefinitionId -like "*$readerRoleGuid"
+      }) | Select-Object -First 1
+    if ($existingMatch) {
+      return $null
+    }
+  }
+  catch {
+    # Pre-check failed, proceed to try the PUT anyway
+  }
+
+  $assignmentName = [guid]::NewGuid().ToString()
+  $path = "$Scope/providers/Microsoft.Authorization/roleAssignments/${assignmentName}?api-version=2022-04-01"
+  $body = @{
+    properties = @{
+      roleDefinitionId = $roleDefinitionId
+      principalId      = $PrincipalObjectId
+      principalType    = 'ServicePrincipal'
+    }
+  } | ConvertTo-Json -Depth 10 -Compress
+
+  try {
+    $response = Invoke-RestMethod -Method PUT -Uri "https://management.azure.com$path" -Headers $armHeaders -Body $body -ContentType 'application/json' -SkipHttpErrorCheck -StatusCodeVariable putStatus
+    if ($putStatus -in @(200, 201)) {
+      if ($response -and $response.id) {
+        return $response.id
+      }
+      return $null
+    }
+    # 409 Conflict means the assignment already exists (race condition with pre-check)
+    if ($putStatus -eq 409) {
+      return $null
+    }
+    # Any other non-success status is a real error
+    throw "Azure RBAC Reader assignment failed at scope '$Scope'. HTTP $putStatus"
+  }
+  catch {
+    if ($_.Exception.Message -match 'RoleAssignmentExists|Conflict' -or ($putStatus -and $putStatus -eq 409)) {
+      return $null
+    }
+    throw "Azure RBAC Reader assignment failed at scope '$Scope': $($_.Exception.Message)"
+  }
+}

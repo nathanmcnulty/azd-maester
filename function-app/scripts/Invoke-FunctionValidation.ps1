@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
   [string]$SubscriptionId,
@@ -20,7 +20,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module (Join-Path $PSScriptRoot '..\..\shared\scripts\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
 
 $azAccount = Get-AzCliSubscriptionContext -SubscriptionId $SubscriptionId -TenantId $TenantId
 if (-not $TenantId) { $TenantId = $azAccount.tenantId }
