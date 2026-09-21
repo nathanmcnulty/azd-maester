@@ -36,6 +36,11 @@ Describe 'Automation Account deployment evidence' {
 
     $result.Report.schemaVersion | Should -Be '1.0'
     $result.Report.outcome | Should -Be 'passed'
+    $runtimeCheck = $result.Report.checks | Where-Object id -eq 'runtime.runbook-job'
+    $runtimeCheck.title | Should -Be 'Maester report lifecycle'
+    $runtimeCheck.summary | Should -Match 'Review the Maester report for test outcomes'
+    $runtimeCheck.evidence.validationScope | Should -Be 'lifecycle'
+    $runtimeCheck.evidence.testOutcomesEvaluated | Should -BeFalse
     $result.Receipt.schemaVersion | Should -Be '1.0'
     $result.Receipt.artifacts | Should -Contain 'reports/deployment-validation.json'
     Test-Path (Join-Path $TestDrive 'reports\deployment-validation.json') | Should -BeTrue

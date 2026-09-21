@@ -132,17 +132,25 @@ function Write-MaesterDeploymentEvidence {
     New-AzdValidationCheckDefinition `
       -Id 'runtime.runbook-job' `
       -Phase runtime `
-      -Title 'Maester validation runbook' `
-      -Summary 'The validation runbook completed successfully.' `
+      -Title 'Maester report lifecycle' `
+      -Summary 'The runbook must reach Completed; Maester test outcomes remain in the generated report.' `
       -Expected 'Completed' `
       -Remediation 'Review the Azure Automation job output, correct the failure, and rerun validation.' `
       -DependsOn 'infrastructure.automation-account' `
       -Action ({
           if ($ValidationResult.ValidationPassed -and $ValidationResult.FinalStatus -eq 'Completed') {
-            New-AzdCheckOutcome -Status pass -Summary 'The validation runbook completed successfully.' -Actual 'Completed' -Evidence @{ jobId = [string]$ValidationResult.JobId }
+            New-AzdCheckOutcome `
+              -Status pass `
+              -Summary 'The validation runbook reached Completed and the report lifecycle finished. Review the Maester report for test outcomes.' `
+              -Actual 'Completed' `
+              -Evidence @{
+                jobId = [string]$ValidationResult.JobId
+                validationScope = 'lifecycle'
+                testOutcomesEvaluated = $false
+              }
           }
           else {
-            New-AzdCheckFailure -Code 'runbookValidationFailed' -Summary 'The validation runbook did not complete successfully.' -Expected 'Completed' -Details @{ finalStatus = [string]$ValidationResult.FinalStatus } -Remediation 'Review the Azure Automation job output, correct the failure, and rerun validation.'
+            New-AzdCheckFailure -Code 'runbookValidationFailed' -Summary 'The validation runbook did not reach Completed.' -Expected 'Completed' -Details @{ finalStatus = [string]$ValidationResult.FinalStatus } -Remediation 'Review the Azure Automation job output, correct the failure, and rerun validation.'
           }
         }.GetNewClosure())
   )
