@@ -25,7 +25,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-Import-Module (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Maester-DeploymentEvidence.psm1') -Force
 
 function Get-EnvValue {
   param(
@@ -80,6 +81,15 @@ if (-not $PSBoundParameters.ContainsKey('PermissionProfile') -and $env:PERMISSIO
 }
 
 Write-Host 'Running postprovision setup...'
+
+$selectedAccount = Get-AzCliSubscriptionContext -SubscriptionId $SubscriptionId -TenantId $TenantId
+if (-not $TenantId) {
+  $TenantId = [string]$selectedAccount.tenantId
+}
+$azureCloud = [string](az cloud show --query name -o tsv)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($azureCloud)) {
+  throw 'Could not resolve the active Azure cloud.'
+}
 
 $setupParams = @{
   SubscriptionId    = $SubscriptionId
@@ -162,6 +172,7 @@ if ($envValues.Count -gt 0) {
 }
 
 Write-Host 'Running postprovision runbook validation...'
+$validationStartedAt = [datetimeoffset]::UtcNow
 
 # When Exchange or Teams permissions were just provisioned, poll Graph API
 # to verify the app role assignments are visible before triggering validation.
@@ -220,7 +231,19 @@ if ($TenantId) {
 
 $testParams['PassThru'] = $true
 
-$validationResult = & "$PSScriptRoot\Invoke-RunbookValidation.ps1" @testParams
+$validationFailure = $null
+try {
+  $validationResult = & "$PSScriptRoot\Invoke-RunbookValidation.ps1" @testParams
+}
+catch {
+  $validationFailure = $_
+  $validationResult = [pscustomobject]@{
+    ValidationPassed = $false
+    JobId = [guid]::Empty.ToString()
+    FinalStatus = 'Failed'
+    CompletedAt = [datetimeoffset]::UtcNow.ToString('o')
+  }
+}
 
 $armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
 $armHeaders = @{ Authorization = "Bearer $armToken" }
@@ -315,6 +338,42 @@ Write-Host "Deployment summary written to: $summaryPath"
 
 if ($webAppResource) {
   Write-Host "Optional custom DNS setup guide: $customDnsDocsUrl"
+}
+
+$guiEnvironment = @{}
+foreach ($name in @(
+    'AZD_GUI_PROJECT_ID',
+    'AZD_GUI_ENVIRONMENT',
+    'AZD_GUI_TEMPLATE_ID',
+    'AZD_GUI_SOURCE_REVISION',
+    'AZD_GUI_CONTRACT_DIGEST',
+    'AZD_GUI_OPERATION_ID',
+    'AZD_GUI_OPERATION_KIND'
+  )) {
+  $value = [Environment]::GetEnvironmentVariable($name)
+  if (-not [string]::IsNullOrWhiteSpace($value)) {
+    $guiEnvironment[$name] = $value
+  }
+}
+
+$evidence = Write-MaesterDeploymentEvidence `
+  -RepositoryRoot (Resolve-Path (Join-Path $PSScriptRoot '..')).Path `
+  -ValidationStartedAt $validationStartedAt `
+  -ValidationResult $validationResult `
+  -Resources $resources `
+  -EnvironmentName $EnvironmentName `
+  -AzureCloud $azureCloud `
+  -TenantId $TenantId `
+  -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $ResourceGroupName `
+  -AutomationAccountName $automationAccountName `
+  -GuiEnvironment $guiEnvironment
+
+Write-Host "Deployment validation report written to: $($evidence.ValidationPath)"
+Write-Host "Deployment receipt written to: $($evidence.ReceiptPath)"
+
+if ($validationFailure -or $evidence.Report.outcome -eq 'failed') {
+  throw 'Postprovision validation failed. Review reports/deployment-validation.json and the Azure Automation job output.'
 }
 
 Write-Host 'azd postprovision automation completed successfully.'

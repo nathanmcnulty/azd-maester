@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "azd deployment receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "template",
+    "templateVersion",
+    "mode",
+    "summary",
+    "artifacts",
+    "operationalActions",
+    "details"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "enum": [
+        "1.0",
+        "1.1"
+      ]
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "template": {
+      "type": "string",
+      "minLength": 1
+    },
+    "templateVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "enum": [
+        "plan",
+        "enforce"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applied",
+        "unchanged",
+        "skipped",
+        "warnings",
+        "failed"
+      ],
+      "properties": {
+        "applied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unchanged": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?![A-Za-z]:)(?!/)(?!\\.{1,2}(?:/|$))(?!.*?/\\.{1,2}(?:/|$))[^\\\\\\u0000-\\u001F]+$"
+      }
+    },
+    "operationalActions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "details": {
+      "type": "object",
+      "properties": {
+        "azdManagementEvidence": {
+          "$ref": "#/$defs/azdManagementEvidence"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "azdManagementEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "evidenceClass",
+        "binding",
+        "nextActions"
+      ],
+      "properties": {
+        "version": {
+          "const": "1"
+        },
+        "evidenceClass": {
+          "enum": [
+            "resourceMutation",
+            "cleanup"
+          ]
+        },
+        "binding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "project",
+            "target",
+            "source",
+            "operation"
+          ],
+          "properties": {
+            "project": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "environment"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[^\\u0000-\\u001F]+$"
+                },
+                "environment": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[^\\u0000-\\u001F]+$"
+                }
+              }
+            },
+            "target": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "azureCloud",
+                "tenantId",
+                "subscriptionId"
+              ],
+              "properties": {
+                "azureCloud": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[^\\u0000-\\u001F]+$"
+                },
+                "tenantId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                },
+                "subscriptionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                },
+                "resourceGroup": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[^\\u0000-\\u001F]+$"
+                }
+              }
+            },
+            "source": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "templateId",
+                "revision"
+              ],
+              "properties": {
+                "templateId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[^\\u0000-\\u001F]+$"
+                },
+                "revision": {
+                  "oneOf": [
+                    {
+                      "const": "local"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{40}$"
+                    }
+                  ]
+                },
+                "contractDigest": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            },
+            "operation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "kind"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                },
+                "kind": {
+                  "enum": [
+                    "provision",
+                    "deploy",
+                    "up",
+                    "down",
+                    "validate",
+                    "delivery",
+                    "cleanup"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "nextActions": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "owner",
+              "priority"
+            ],
+            "properties": {
+              "code": {
+                "enum": [
+                  "reviewWarnings",
+                  "retryOperation",
+                  "verifyResources",
+                  "verifyPermissions",
+                  "proveDelivery",
+                  "completeCleanup"
+                ]
+              },
+              "owner": {
+                "enum": [
+                  "operator",
+                  "subscriptionOwner",
+                  "identityAdmin",
+                  "messagingAdmin",
+                  "applicationOwner",
+                  "templateMaintainer"
+                ]
+              },
+              "priority": {
+                "enum": [
+                  "required",
+                  "recommended"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "evidenceClass": {
+                "const": "cleanup"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "binding": {
+                "properties": {
+                  "operation": {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "down",
+                          "cleanup"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "binding": {
+                "properties": {
+                  "operation": {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "provision",
+                          "deploy",
+                          "up"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schemaVersion": {
+            "const": "1.1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "details": {
+            "required": [
+              "azdManagementEvidence"
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "details": {
+            "not": {
+              "required": [
+                "azdManagementEvidence"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

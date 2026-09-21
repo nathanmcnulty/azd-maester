@@ -10,8 +10,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Maester-PreProvision.psm1') -Force
-Import-Module (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Maester-Helpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-PreProvision.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-Helpers.psm1') -Force
 
 $location = $env:AZURE_LOCATION
 Invoke-MaesterPreProvision `
