@@ -2,6 +2,52 @@
   "manifestVersion": "1.0",
   "components": [
     {
+      "id": "deployment-receipt",
+      "version": "0.2.1",
+      "sourceRepository": "https://github.com/nathanmcnulty/azd-reference",
+      "sourceRevision": "0c96cc89c554ffc3b3ca82ceda12da6591e816c1",
+      "files": [
+        {
+          "source": "components/powershell/deployment-receipt/Azd.DeploymentReceipt.psd1",
+          "target": "scripts/vendor/Azd.DeploymentReceipt/Azd.DeploymentReceipt.psd1",
+          "sha256": "db95f1a17d68d75582c1cc30395f272b19a2b3bf7eadc30ebadc22654832a8c6"
+        },
+        {
+          "source": "components/powershell/deployment-receipt/Azd.DeploymentReceipt.psm1",
+          "target": "scripts/vendor/Azd.DeploymentReceipt/Azd.DeploymentReceipt.psm1",
+          "sha256": "5134d54dc15a0954d9a626a6d14a570b6960f6bede26f13d3308970e6c94fb71"
+        },
+        {
+          "source": "schemas/deployment-receipt.schema.json",
+          "target": "scripts/vendor/Azd.DeploymentReceipt/deployment-receipt.schema.json",
+          "sha256": "cf796250f8c192d4ab27f43ead85bb855744684813c5aadb851f46b8eb8d7120"
+        }
+      ]
+    },
+    {
+      "id": "deployment-validation",
+      "version": "1.1.1",
+      "sourceRepository": "https://github.com/nathanmcnulty/azd-reference",
+      "sourceRevision": "0c96cc89c554ffc3b3ca82ceda12da6591e816c1",
+      "files": [
+        {
+          "source": "components/powershell/deployment-validation/Azd.DeploymentValidation.psd1",
+          "target": "scripts/vendor/Azd.DeploymentValidation/Azd.DeploymentValidation.psd1",
+          "sha256": "96f0773f9b2ebcb2e36cdbc894420fa898f10d99662edefd4a1782c29e9794f0"
+        },
+        {
+          "source": "components/powershell/deployment-validation/Azd.DeploymentValidation.psm1",
+          "target": "scripts/vendor/Azd.DeploymentValidation/Azd.DeploymentValidation.psm1",
+          "sha256": "6ad1183fb38b1b11283f0ff08c0dbb9f84b0070355521dfa9ec70cba125c653d"
+        },
+        {
+          "source": "schemas/deployment-validation.schema.json",
+          "target": "scripts/vendor/Azd.DeploymentValidation/deployment-validation.schema.json",
+          "sha256": "eeabd298edf86ef88f9143dfef3fbec995f20f7ef0d3c380ab832b7514e83c34"
+        }
+      ]
+    },
+    {
       "id": "maester-azd-hooks",
       "version": "0.1.0",
       "sourceRepository": "https://github.com/nathanmcnulty/azd-reference",

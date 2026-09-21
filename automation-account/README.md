@@ -87,7 +87,7 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 ## Script map
 
 - azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
-- Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-RunbookValidation.ps1`
+- Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-RunbookValidation.ps1`, `scripts/Maester-DeploymentEvidence.psm1`
 - Automation runbook payload script (published into Automation): `scripts/Invoke-MaesterAutomationRunbook.ps1`
 
 ## Runtime behavior
@@ -96,6 +96,8 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 - Outputs:
   - `archive/maester-report-<timestamp>.html.gz`
   - `latest/latest.html`
+  - local `reports/deployment-validation.json` and `reports/deployment-receipt.json` management evidence
+- Deployments started by Azure Deployment Studio bind the receipt to its exact project, source contract, Azure target, and `up`/`provision`/`deploy` operation. Direct `azd` runs emit the compatible unbound receipt. The postprovision validation report remains unbound because it is part of that deployment operation rather than a separate GUI `validate` operation.
 - In WebApp mode, latest report is published to Web App `index.html`
 - Entra auth via app registration is configured automatically. Existing Microsoft Graph consent and app-role assignments are reused; if they are not already present, the first run may require a **Global Administrator or Privileged Role Administrator**.
 - Signed-in deployment user is granted `Storage Blob Data Reader` on the solution storage account

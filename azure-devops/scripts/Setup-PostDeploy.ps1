@@ -478,7 +478,7 @@ function Get-EmptyAdoRepositoryCandidate {
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
 
-Import-Module (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
 Import-Module Az.Accounts -Force
 
 $adopsInstallMessage = "PowerShell module 'ADOPS' is required to configure Azure DevOps. Install now to continue postprovision setup."
@@ -993,7 +993,7 @@ Set-AzdEnvJsonArray -Name 'AZDO_BASE_ROLE_ASSIGNMENT_IDS' -Values @($baseRoleAss
 Write-Host 'Granting Microsoft Graph permissions for Maester...'
 $mailRecipientForGraph = if ($env:MAIL_RECIPIENT) { $env:MAIL_RECIPIENT.Trim() } else { '' }
 $includeMailSend = -not [string]::IsNullOrWhiteSpace($mailRecipientForGraph)
-& (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Grant-MaesterGraphPermissions.ps1') `
+& (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Grant-MaesterGraphPermissions.ps1') `
   -TenantId $TenantId `
   -PrincipalObjectId $servicePrincipal.Id `
   -PermissionProfile $PermissionProfile `

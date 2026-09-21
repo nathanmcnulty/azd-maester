@@ -41,7 +41,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
 
-Import-Module (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
 
 
 # ──────────────────────────────────────────────
@@ -215,7 +215,7 @@ if (-not $containerAppJob) {
 
 $containerAppJobName = $containerAppJob.name
 
-$principalId = & (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Get-ManagedIdentityPrincipal.ps1') `
+$principalId = & (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Get-ManagedIdentityPrincipal.ps1') `
   -SubscriptionId $SubscriptionId `
   -ResourceGroupName $resolvedResourceGroupName `
   -ProviderNamespace 'Microsoft.App' `
@@ -232,7 +232,7 @@ Set-AzdEnvValue -Name 'CONTAINER_JOB_MI_PRINCIPAL_ID' -Value $principalId
 $mailRecipientForGraph = if ($env:MAIL_RECIPIENT) { $env:MAIL_RECIPIENT.Trim() } else { '' }
 $includeMailSend = -not [string]::IsNullOrWhiteSpace($mailRecipientForGraph)
 
-& (Join-Path $PSScriptRoot '..\vendor\Azd.MaesterHooks\Grant-MaesterGraphPermissions.ps1') `
+& (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Grant-MaesterGraphPermissions.ps1') `
   -TenantId $TenantId `
   -PrincipalObjectId $principalId `
   -PermissionProfile $PermissionProfile `
