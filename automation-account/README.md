@@ -9,8 +9,10 @@ Deploys a production-style Maester automation solution on Azure with:
 
 ## Quickstart (recommended)
 
-After `azd init -t <your-template-id>` and `cd automation-account`, run one command:
-
+After `azd init -t <your-template-id>` and `cd automation-account`, initiate the login:    
+Login to the azd module: `azd auth login`    
+Login to the az cli: `az login`    
+Then, run one command:    
 `azd up`
 
 During interactive `azd up`, the preprovision wizard prompts for:
