@@ -88,6 +88,7 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 
 - azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
 - Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-RunbookValidation.ps1`, `scripts/Maester-DeploymentEvidence.psm1`
+- Validation prints actionable `Output`, `Warning`, and `Error` records, summarizes omitted progress/debug noise, and labels completed jobs with error records as lifecycle success that still requires Maester report review.
 - Automation runbook payload script (published into Automation): `scripts/Invoke-MaesterAutomationRunbook.ps1`
 
 ## Runtime behavior

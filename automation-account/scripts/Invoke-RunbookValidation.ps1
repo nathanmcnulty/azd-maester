@@ -23,6 +23,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'RunbookValidationStreams.psm1') -Force
 
 $azAccount = Get-AzCliSubscriptionContext -SubscriptionId $SubscriptionId -TenantId $TenantId
 if (-not $TenantId) { $TenantId = $azAccount.tenantId }
@@ -86,11 +87,29 @@ do {
   }
 } while ($nextLink)
 
-foreach ($stream in $streams) {
-  $streamType = $stream.properties.streamType
+$streamSummary = Get-MaesterAutomationJobStreamSummary -Streams $streams -DetailResolver {
+  param($stream)
+
   $streamId = if ($stream.properties.jobStreamId) { $stream.properties.jobStreamId } else { ($stream.id -split '/')[-1] }
-  $detail = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$basePath/jobs/${jobId}/streams/${streamId}?api-version=$apiVersion" -Headers $armHeaders
-  Write-Host "[$streamType] $($detail.properties.summary)"
+  Invoke-RestMethod -Method GET -Uri "https://management.azure.com$basePath/jobs/${jobId}/streams/${streamId}?api-version=$apiVersion" -Headers $armHeaders
+}
+
+foreach ($message in $streamSummary.Messages) {
+  Write-Host "[$($message.Type)] $($message.Message)"
+}
+
+Write-Host (
+  'Automation job stream summary: ' +
+  "Output=$($streamSummary.Counts.Output), " +
+  "Warning=$($streamSummary.Counts.Warning), " +
+  "Error=$($streamSummary.Counts.Error), " +
+  "omitted=$($streamSummary.OmittedCount)."
+)
+if ($streamSummary.Counts.Error -gt 0) {
+  Write-Warning (
+    "The completed runbook emitted $($streamSummary.Counts.Error) error stream record(s). " +
+    'Lifecycle validation confirms execution and report generation; review the Maester report for test outcomes and permission-limited coverage.'
+  )
 }
 
 if ($status -ne 'Completed') {
