@@ -95,6 +95,8 @@ var storageBlobDataContributorRoleId = subscriptionResourceId('Microsoft.Authori
 var appServicePlanName = 'asp-${toLower(environmentName)}'
 var webAppName = 'app-maester-${resourceSuffix}'
 var includeWebApp = toLower(includeWebAppOption) == 'true'
+var includeExchange = toLower(includeExchangeOption) == 'true'
+var includeTeams = toLower(includeTeamsOption) == 'true'
 var defaultTags = {
   workload: 'maester'
   solution: 'automation-account'
@@ -277,7 +279,8 @@ resource runtimePackageAzAccounts 'Microsoft.Automation/automationAccounts/runti
   parent: runtime74
   properties: {
     contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/Az.Accounts'
+      uri: 'https://www.powershellgallery.com/api/v2/package/Az.Accounts/5.5.3'
+      contentHash: { algorithm: 'sha256', value: '5A8BE006E80A7CA66134DF1F28E0EAD93EF4BC437685B647B6720583CB58E615' }
     }
   }
 }
@@ -288,6 +291,7 @@ resource runtimePackageMaester 'Microsoft.Automation/automationAccounts/runtimeE
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/Maester/2.2.0'
+      contentHash: { algorithm: 'sha256', value: '8C8A9757771177BD89785262E6B38385CF5E5C19BB799E4399E77F6439AD699C' }
     }
   }
 }
@@ -297,7 +301,8 @@ resource runtimePackagePester 'Microsoft.Automation/automationAccounts/runtimeEn
   parent: runtime74
   properties: {
     contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/Pester'
+      uri: 'https://www.powershellgallery.com/api/v2/package/Pester/6.2.0'
+      contentHash: { algorithm: 'sha256', value: 'E6AC7418D4F12500269AACA58AE56CF1CAAFBBF1AFA2CEC334E289D1CF50A239' }
     }
   }
 }
@@ -307,7 +312,8 @@ resource runtimePackageNuGet 'Microsoft.Automation/automationAccounts/runtimeEnv
   parent: runtime74
   properties: {
     contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/NuGet'
+      uri: 'https://www.powershellgallery.com/api/v2/package/NuGet/1.3.3'
+      contentHash: { algorithm: 'sha256', value: 'FCF1A37925C235159AB1C23249F016E65456EA3A36D0EA42DB85F4F15BF7C033' }
     }
   }
 }
@@ -317,7 +323,19 @@ resource runtimePackagePackageManagement 'Microsoft.Automation/automationAccount
   parent: runtime74
   properties: {
     contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/PackageManagement'
+      uri: 'https://www.powershellgallery.com/api/v2/package/PackageManagement/1.4.8.1'
+      contentHash: { algorithm: 'sha256', value: '7E1F8A75B6BC8A83D8ABFF79F6690FC1DFBD534FD3E5733D97E19BCB5954C13E' }
+    }
+  }
+}
+
+resource runtimePackagePowerShellGet 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
+  name: 'PowerShellGet'
+  parent: runtime74
+  properties: {
+    contentLink: {
+      uri: 'https://www.powershellgallery.com/api/v2/package/PowerShellGet/2.2.5'
+      contentHash: { algorithm: 'sha256', value: '6B8CEBF2A464EAEB31B0A6D627355C30D9D1899DBA0CE3BDD0D4E7AFCA148673' }
     }
   }
 }
@@ -327,27 +345,30 @@ resource runtimePackageGraphAuth 'Microsoft.Automation/automationAccounts/runtim
   parent: runtime74
   properties: {
     contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/Microsoft.Graph.Authentication'
+      uri: 'https://www.powershellgallery.com/api/v2/package/Microsoft.Graph.Authentication/2.41.0'
+      contentHash: { algorithm: 'sha256', value: '42E8B7A8BBA6AFD1910510D8108C1871EE5D12C5A4818CC4C36CA406369A7AFD' }
     }
   }
 }
 
-resource runtimePackageExchangeOnlineManagement 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
+resource runtimePackageExchangeOnlineManagement 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = if (includeExchange) {
   name: 'ExchangeOnlineManagement'
   parent: runtime74
   properties: {
     contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/ExchangeOnlineManagement'
+      uri: 'https://www.powershellgallery.com/api/v2/package/ExchangeOnlineManagement/3.10.1'
+      contentHash: { algorithm: 'sha256', value: '545FB0FDF65B96ABED37F4F5B5D7DB661276DDC7DE48A742BB6E7199AB9414A3' }
     }
   }
 }
 
-resource runtimePackageMicrosoftTeams 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
+resource runtimePackageMicrosoftTeams 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = if (includeTeams) {
   name: 'MicrosoftTeams'
   parent: runtime74
   properties: {
     contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/MicrosoftTeams'
+      uri: 'https://www.powershellgallery.com/api/v2/package/MicrosoftTeams/8.0.0'
+      contentHash: { algorithm: 'sha256', value: '6AA426D37913DEE78628AD36DFC26E40161702018479F110F396712E896F2882' }
     }
   }
 }
@@ -362,8 +383,8 @@ resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2024-10-23' =
     logVerbose: false
     description: 'Runbook to execute Maester report workflow'
     publishContentLink: {
-      uri: 'https://raw.githubusercontent.com/maester365/maester/2.2.0/powershell/public/Invoke-Maester.ps1'
-      version: '2.2.0'
+      uri: 'https://raw.githubusercontent.com/maester365/maester/c657a4b8a24267ccd795edb0c7db402e0d440e3b/powershell/public/Invoke-Maester.ps1'
+      contentHash: { algorithm: 'sha256', value: 'FF70CB4AB2F32ADA6C5FF5121931D3C8BE45BDBCDB746970C26FB275FFAD312F' }
     }
     runtimeEnvironment: runtime74.name
   }
@@ -373,6 +394,7 @@ resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2024-10-23' =
     runtimePackagePester
     runtimePackageNuGet
     runtimePackagePackageManagement
+    runtimePackagePowerShellGet
     runtimePackageGraphAuth
     runtimePackageExchangeOnlineManagement
     runtimePackageMicrosoftTeams
@@ -476,21 +498,12 @@ resource schedule 'Microsoft.Automation/automationAccounts/schedules@2023-11-01'
   }
 }
 
-resource jobSchedule 'Microsoft.Automation/automationAccounts/jobSchedules@2023-11-01' = {
-  name: jobScheduleId
-  parent: automationAccount
-  properties: {
-    schedule: {
-      name: schedule.name
-    }
-    runbook: {
-      name: runbook.name
-    }
-  }
-}
-
 output automationAccountName string = automationAccount.name
+output jobScheduleId string = jobScheduleId
 output automationPrincipalId string = automationAccount.identity.principalId
 output storageAccountName string = storageAccount.name
 output webAppName string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output STORAGE_ACCOUNT_NAME string = storageAccount.name
+output WEB_APP_NAME string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output WEB_APP_ENABLED string = includeWebApp ? 'true' : 'false'
 output webAppDefaultHostName string = includeWebApp ? maesterWebApp!.outputs.webAppDefaultHostName : ''

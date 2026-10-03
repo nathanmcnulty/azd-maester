@@ -156,6 +156,14 @@ resource containerLatest 'Microsoft.Storage/storageAccounts/blobServices/contain
   }
 }
 
+resource containerValidation 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  name: 'validation'
+  parent: blobService
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 resource containerDeploymentPackage 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = if (isFlexConsumption) {
   name: 'deploymentpackage'
   parent: blobService
@@ -440,4 +448,8 @@ output functionAppName string = functionApp.name
 output functionAppPrincipalId string = functionApp.identity.principalId
 output storageAccountName string = storageAccount.name
 output webAppName string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output FUNCTION_APP_NAME string = functionApp.name
+output STORAGE_ACCOUNT_NAME string = storageAccount.name
+output WEB_APP_NAME string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output WEB_APP_ENABLED string = includeWebApp ? 'true' : 'false'
 output webAppDefaultHostName string = includeWebApp ? maesterWebApp!.outputs.webAppDefaultHostName : ''

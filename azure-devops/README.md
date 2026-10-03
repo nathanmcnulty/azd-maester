@@ -78,8 +78,10 @@ Some environments already have the required Microsoft Graph permissions consente
 ## Script map
 
 - azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
+- Direct preprovision, setup, and postprovision runs require selecting the target with `azd env select <env>` and passing `-EnvironmentName <env>`; the hook verifies that selection and its Azure scope before changes.
 - Core provisioning: `scripts/Setup-PostDeploy.ps1`
 - Pipeline runtime script (committed to Azure Repos): `scripts/Invoke-MaesterAzureDevOpsRun.ps1`
+- Runtime modules are exact SHA-256 verified packages from `runtime-packages.lock.json`; [pin details](docs/runtime-package-pins.md). Validation inspects the task timeline and published test artifact before classifying a failed Maester test run as genuine findings.
 - Pipeline validation: `scripts/Invoke-PipelineValidation.ps1`
 
 ## Reference docs

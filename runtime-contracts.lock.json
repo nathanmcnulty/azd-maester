@@ -1,0 +1,350 @@
+{
+  "schemaVersion": 1,
+  "hashNormalization": "UTF-8 without BOM; CRLF and CR normalized to LF",
+  "files": [
+    {
+      "path": "automation-account/infra/main.bicep",
+      "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
+      "sourceCommit": "285a280b633ca77886bb0757478576e26c04914b",
+      "sha256": "1A9E20F631201C05841FDB344DA7B5F44EE7A29EC674F776F160DCFCCBF2B7DA",
+      "sourceSha256": "782092D7DBD950DD2D58FE125B5F93002E0597A9DD6C2FDD28242997BDD17F15",
+      "sourceMatch": false,
+      "legacyReason": "Legacy Automation infrastructure adds explicit storage and optional Web App binding outputs."
+    },
+    {
+      "path": "automation-account/scripts/Invoke-MaesterAutomationRunbook.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
+      "sourceCommit": "285a280b633ca77886bb0757478576e26c04914b",
+      "sha256": "D8ABDA98F528975704EC7731CC58924879865E282B1A193B5908131D1B322D58",
+      "sourceSha256": "D8ABDA98F528975704EC7731CC58924879865E282B1A193B5908131D1B322D58",
+      "sourceMatch": true
+    },
+    {
+      "path": "automation-account/scripts/Invoke-RunbookValidation.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
+      "sourceCommit": "285a280b633ca77886bb0757478576e26c04914b",
+      "sha256": "F7DAA2954015357901C6A25401FC40CCCFAFA3AF822047C39B9372CA914F0572",
+      "sourceSha256": "F88BFB870B6F5358543A50DF60FEC4EBD77057E62B58DABC12C6A4639D407405",
+      "sourceMatch": false,
+      "legacyReason": "Legacy signed deployment evidence stream checks remain in this validator."
+    },
+    {
+      "path": "automation-account/scripts/Setup-PostDeploy.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
+      "sourceCommit": "201caff54f515d30e5d6d87aa882d722112cd58f",
+      "sha256": "0223EBBBA9FB2A1C5728C6258CE82A7B3528DA63A63AA6821D850036DBCC2740",
+      "sourceSha256": "D7A47AA9FFAA7EF8F7A8566DD2C4D9F502C4B1A62D69570827EB09773F724DEE",
+      "sourceMatch": false,
+      "legacyReason": "Legacy setup combines exact target and selected-environment binding with the reviewed owned-schedule receipt flow."
+    },
+    {
+      "path": "container-app-job/Dockerfile",
+      "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
+      "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
+      "sha256": "017D00B1BAB44B5AA3BB34802B2C2D9ECFB635C04A9FA17C1F3C2AB874E3343D",
+      "sourceSha256": "017D00B1BAB44B5AA3BB34802B2C2D9ECFB635C04A9FA17C1F3C2AB874E3343D",
+      "sourceMatch": true
+    },
+    {
+      "path": "container-app-job/infra/main.bicep",
+      "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
+      "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
+      "sha256": "5AE1ADDD585AB30973F4482B22C8EA924F26E40F221C705D1552ADA707F20A45",
+      "sourceSha256": "A84CA9218FEF793FA00AA3AE063847DD66B2F7869E473CEB69C772BEDD7A90B9",
+      "sourceMatch": false,
+      "legacyReason": "Legacy job naming differs from standalone and exact storage/Web App binding outputs are added locally."
+    },
+    {
+      "path": "container-app-job/runtime-packages.lock.json",
+      "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
+      "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
+      "sha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
+      "sourceSha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
+      "sourceMatch": true
+    },
+    {
+      "path": "container-app-job/scripts/Install-LockedModules.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
+      "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
+      "sha256": "B86491E96B0F2A4BD028A4A5CDACD51797EA9443A037D0BC0755825428219066",
+      "sourceSha256": "B86491E96B0F2A4BD028A4A5CDACD51797EA9443A037D0BC0755825428219066",
+      "sourceMatch": true
+    },
+    {
+      "path": "container-app-job/scripts/Build-MaesterImage.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
+      "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
+      "sha256": "F1FEFAA295FC2F364479CA758C6146AFF75BD4E162DCA48CAF34F83CE2FF0B9C",
+      "sourceSha256": "F1FEFAA295FC2F364479CA758C6146AFF75BD4E162DCA48CAF34F83CE2FF0B9C",
+      "sourceMatch": true
+    },
+    {
+      "path": "container-app-job/scripts/Invoke-MaesterContainerJob.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
+      "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
+      "sha256": "A8C3E65384D71B55E843CBF39C16F87680A960364FABA2B95CDC2255436ADD73",
+      "sourceSha256": "A8C3E65384D71B55E843CBF39C16F87680A960364FABA2B95CDC2255436ADD73",
+      "sourceMatch": true
+    },
+    {
+      "path": "container-app-job/scripts/Setup-PostDeploy.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
+      "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
+      "sha256": "5403762BDA2609A78E15F85793660EE874D832E357CB38DF6C4B95AB9329ECFE",
+      "sourceSha256": "2A175ACE3B7454110BFE2BC40C61167AF2B7264F18550D67AEC35970065F17BD",
+      "sourceMatch": false,
+      "legacyReason": "Legacy setup preserves stable job naming and verifies exact storage and optional Web App identities before role or Easy Auth changes."
+    },
+    {
+      "path": "azure-devops/infra/main.bicep",
+      "sourceRepository": "nathanmcnulty/azd-maester-azuredevops",
+      "sourceCommit": "beb69ac1901393d04ca6dcfbfb639865566044f4",
+      "sha256": "388E7BAED6BF6BC56999BBE1AC637C9BC203F9DCA90E966A06DC9224E83C66CC",
+      "sourceSha256": "A51FB8B7003A95029888889F1FE0CAE77B77550EE25D9A1C12842B78BDCA4D67",
+      "sourceMatch": false,
+      "legacyReason": "Legacy Azure DevOps infrastructure adds explicit storage and optional Web App binding outputs."
+    },
+    {
+      "path": "azure-devops/pipelines/template-maester.yml",
+      "sourceRepository": "nathanmcnulty/azd-maester-azuredevops",
+      "sourceCommit": "beb69ac1901393d04ca6dcfbfb639865566044f4",
+      "sha256": "10D86F17A625CF0BF3B6D224309FE084B4CB134C21AA91415E2487EFE26B6D5C",
+      "sourceSha256": "10D86F17A625CF0BF3B6D224309FE084B4CB134C21AA91415E2487EFE26B6D5C",
+      "sourceMatch": true
+    },
+    {
+      "path": "azure-devops/runtime-packages.lock.json",
+      "sourceRepository": "nathanmcnulty/azd-maester-azuredevops",
+      "sourceCommit": "beb69ac1901393d04ca6dcfbfb639865566044f4",
+      "sha256": "A3DD6DFBEF9E97E8320A9AED93676208BADD47272701CE60E4F371F84ED22EEC",
+      "sourceSha256": "A3DD6DFBEF9E97E8320A9AED93676208BADD47272701CE60E4F371F84ED22EEC",
+      "sourceMatch": true
+    },
+    {
+      "path": "azure-devops/scripts/Install-LockedModules.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azuredevops",
+      "sourceCommit": "beb69ac1901393d04ca6dcfbfb639865566044f4",
+      "sha256": "B86491E96B0F2A4BD028A4A5CDACD51797EA9443A037D0BC0755825428219066",
+      "sourceSha256": "B86491E96B0F2A4BD028A4A5CDACD51797EA9443A037D0BC0755825428219066",
+      "sourceMatch": true
+    },
+    {
+      "path": "azure-devops/scripts/PipelineValidation.Core.psm1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azuredevops",
+      "sourceCommit": "beb69ac1901393d04ca6dcfbfb639865566044f4",
+      "sha256": "38CEA40DB51CAC281134A49363CBA564C330AEE69D9D61CECD8D1849917A45A8",
+      "sourceSha256": "38CEA40DB51CAC281134A49363CBA564C330AEE69D9D61CECD8D1849917A45A8",
+      "sourceMatch": true
+    },
+    {
+      "path": "azure-devops/scripts/Invoke-MaesterAzureDevOpsRun.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azuredevops",
+      "sourceCommit": "beb69ac1901393d04ca6dcfbfb639865566044f4",
+      "sha256": "31F88D0EDFC7D07BE77A081A768B3098D8BE6AFD7ACC82C0E29B9F7DBA4EDBEF",
+      "sourceSha256": "31F88D0EDFC7D07BE77A081A768B3098D8BE6AFD7ACC82C0E29B9F7DBA4EDBEF",
+      "sourceMatch": true
+    },
+    {
+      "path": "azure-devops/scripts/Invoke-PipelineValidation.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azuredevops",
+      "sourceCommit": "beb69ac1901393d04ca6dcfbfb639865566044f4",
+      "sha256": "52D30B0A473088C1F37B4F9BAD32C03D8209B986A3EF03DCFDB16A687A764304",
+      "sourceSha256": "4C5C8BF261FBF7CAFA531DF45156BC727F9C5E6B7196C74957AD41FB536459DD",
+      "sourceMatch": false,
+      "legacyReason": "Legacy validator retains Azure PowerShell token fallback; task timeline classification is shared."
+    },
+    {
+      "path": "azure-devops/scripts/Setup-PostDeploy.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azuredevops",
+      "sourceCommit": "beb69ac1901393d04ca6dcfbfb639865566044f4",
+      "sha256": "BD89F9EE8C4C97E75E753BB653D90FBA05D8E079EC26463D79C373C425E33D22",
+      "sourceSha256": "77ED8DA6245849D76FC69007813D836DD6B15D979DD1F8E725EC60BD28E043E1",
+      "sourceMatch": false,
+      "legacyReason": "Legacy Azure DevOps authorization flow now rejects ambiguous Graph applications and verifies exact storage/Web App identities before role or Easy Auth changes."
+    },
+    {
+      "path": "function-app/infra/main.bicep",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "A52745648C6F2E4928E39485D614B91818C8A7C9F20475BCA8758C1B19045521",
+      "sourceSha256": "40A6583C11DD13253A94F0B8153DD7AB7C122A984F31E7A83859B57B13527CC6",
+      "sourceMatch": false,
+      "legacyReason": "Legacy Function App hosting differs; private validation container and exact Function/storage/Web App binding outputs are added locally."
+    },
+    {
+      "path": "function-app/runtime-packages.lock.json",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
+      "sourceSha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/scripts/Install-LockedModules.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "A73E7D7C5161BF2E41375BB704729E5582BD05ECFD9009624724DC551B9308FA",
+      "sourceSha256": "A73E7D7C5161BF2E41375BB704729E5582BD05ECFD9009624724DC551B9308FA",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/scripts/FunctionValidation.Core.psm1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "56D68CEBD6231345013FFE23F65BE719A46AAFBA777C8ADD93048FAF06CB2326",
+      "sourceSha256": "56D68CEBD6231345013FFE23F65BE719A46AAFBA777C8ADD93048FAF06CB2326",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/scripts/Deploy-FunctionCode.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "CFB3EA5F416B01F509AB35C94F058B08993DA9DA51662F25848209D093D0DEDC",
+      "sourceSha256": "CFB3EA5F416B01F509AB35C94F058B08993DA9DA51662F25848209D093D0DEDC",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/scripts/Invoke-FunctionValidation.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "0A8F92483C7F2CFEABC328531E8A25438E1E5AC2C7258DCB55EC5816659FBB4C",
+      "sourceSha256": "0A8F92483C7F2CFEABC328531E8A25438E1E5AC2C7258DCB55EC5816659FBB4C",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/scripts/Run-AzdPostProvision.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "82309FE0A0F298365AA480E1A2A92A2E6A99E36E44EE68D218BF801B466559F6",
+      "sourceSha256": "189D620292AD0845A4021ECEF0D5170697C93421A8E98D77CA3331D744093066",
+      "sourceMatch": false,
+      "legacyReason": "Legacy postprovision summary uses exact Function, storage, optional Web App, and linked hosting-plan identities instead of first-match inventory guesses."
+    },
+    {
+      "path": "function-app/scripts/Setup-PostDeploy.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "A7E1E97667D3F337ED4B8607D4F06EDDBF5FA4CFBBB305AB85693DC1069B849D",
+      "sourceSha256": "5733A8BF33511877AEE31F9D0A785AB4E1BD76E3692A9FCC4C32D7E288076946",
+      "sourceMatch": false,
+      "legacyReason": "Legacy setup verifies exact Function, storage, and optional Web App identities before role or Easy Auth changes."
+    },
+    {
+      "path": "function-app/src/host.json",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "B1327EBA3EC0AFCFF5A0D7D777A5AC2A93E244DB917457E6C68625A99AFA5F51",
+      "sourceSha256": "B1327EBA3EC0AFCFF5A0D7D777A5AC2A93E244DB917457E6C68625A99AFA5F51",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/src/profile.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "81ADDA327E13E246865AE6D70599FF88E4D88447CB04C695545A6B2375B58BE9",
+      "sourceSha256": "81ADDA327E13E246865AE6D70599FF88E4D88447CB04C695545A6B2375B58BE9",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/src/requirements.psd1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "99464340552767DF146063032C20A515EAF5B5E54CFB4503655222FDEC9FEDEE",
+      "sourceSha256": "99464340552767DF146063032C20A515EAF5B5E54CFB4503655222FDEC9FEDEE",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/src/MaesterTimerTrigger/run.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "167B0F527AECA4631CE41533DFECE8D0677D9C1E710B75D7521147AC921E25F2",
+      "sourceSha256": "167B0F527AECA4631CE41533DFECE8D0677D9C1E710B75D7521147AC921E25F2",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/src/MaesterValidationTrigger/function.json",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "4EC0C3D43A1436395EAFE4194FED64248ABEB4D9BC1488819F933F3372517413",
+      "sourceSha256": "4EC0C3D43A1436395EAFE4194FED64248ABEB4D9BC1488819F933F3372517413",
+      "sourceMatch": true
+    },
+    {
+      "path": "function-app/src/MaesterValidationTrigger/run.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+      "sha256": "80F7956ED2B3F0B53664E77FC15D8C49DF3DC5DC027C77989760CB350EED2A1C",
+      "sourceSha256": "80F7956ED2B3F0B53664E77FC15D8C49DF3DC5DC027C77989760CB350EED2A1C",
+      "sourceMatch": true
+    },
+    {
+      "path": "automation-account/scripts/Run-AzdPreProvision.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
+      "sourceCommit": "201caff54f515d30e5d6d87aa882d722112cd58f",
+      "sha256": "F0CA81F982129E8753BEBEE7FA8988E098B94BF7ED457215FB7B73264CD03C26",
+      "sourceSha256": "300E539C8E4F2B96325170EB57620DDA08F087079BA8AA615A5893C4BFA79C51",
+      "sourceMatch": false,
+      "legacyReason": "Legacy preprovision adapts the reviewed exact-owned association flow to its local selected-environment helper and explicit azd writes."
+    },
+    {
+      "path": "automation-account/scripts/JobScheduleOwnership.ps1",
+      "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
+      "sourceCommit": "201caff54f515d30e5d6d87aa882d722112cd58f",
+      "sha256": "3FF129519763EEC53AC8496E1ECF4B42085F91CC7327D23655C5B9A063957F18",
+      "sourceSha256": "3FF129519763EEC53AC8496E1ECF4B42085F91CC7327D23655C5B9A063957F18",
+      "sourceMatch": true
+    }
+  ],
+  "localFiles": [
+    {
+      "path": "automation-account/scripts/Resolve-DeploymentTarget.psm1",
+      "sha256": "3358741A383A8FCE07A7CDC20631C827BE30A3782B29F6CA78FB1CF179E03278",
+      "reason": "Copied local exact resource and Graph application selection guard; each nested solution remains self-contained."
+    },
+    {
+      "path": "container-app-job/scripts/Resolve-DeploymentTarget.psm1",
+      "sha256": "3358741A383A8FCE07A7CDC20631C827BE30A3782B29F6CA78FB1CF179E03278",
+      "reason": "Copied local exact resource and Graph application selection guard; each nested solution remains self-contained."
+    },
+    {
+      "path": "azure-devops/scripts/Resolve-DeploymentTarget.psm1",
+      "sha256": "3358741A383A8FCE07A7CDC20631C827BE30A3782B29F6CA78FB1CF179E03278",
+      "reason": "Copied local exact resource and Graph application selection guard; each nested solution remains self-contained."
+    },
+    {
+      "path": "function-app/scripts/Resolve-DeploymentTarget.psm1",
+      "sha256": "6FE11305184450B31F0B968F1F1BB6A76A64211EE7C2DEA11EB187353E993790",
+      "reason": "Local exact resource, Graph application, and linked hosting-plan selection guards keep the nested Function variant self-contained."
+    },
+    {
+      "path": "automation-account/scripts/Run-AzdPostProvision.ps1",
+      "sha256": "668756B619AE7ECADD82901714BC6BDB6B8AEC70EFA6A2858457A9391AC817BB",
+      "reason": "Legacy postprovision reads receipts from the explicitly selected azd environment."
+    },
+    {
+      "path": "container-app-job/scripts/Run-AzdPostProvision.ps1",
+      "sha256": "BED2054E81D44A28F28CDC8396C6EABC0EB511EAE68928F7284B664CDEEE8243",
+      "reason": "Legacy postprovision reads receipts from the explicitly selected azd environment."
+    },
+    {
+      "path": "azure-devops/scripts/Run-AzdPostProvision.ps1",
+      "sha256": "AC9350FEEDF19603842254593642D9C24E7014897FF3C104369E038668D21A9D",
+      "reason": "Legacy postprovision reads receipts from the explicitly selected azd environment."
+    },
+    {
+      "path": "container-app-job/scripts/Run-AzdPreProvision.ps1",
+      "sha256": "5256D291F4BAD700147658105DE047316816E50BDCD1F8C4362EFEDB35A4ED4B",
+      "reason": "Legacy preprovision checks the selected azd environment before invoking the pinned wizard."
+    },
+    {
+      "path": "azure-devops/scripts/Run-AzdPreProvision.ps1",
+      "sha256": "5F3E0DDA0811426B25F82975EE12BFF01779B9186E2C63CAA41605AFF313A98A",
+      "reason": "Legacy preprovision checks the selected azd environment before invoking the pinned wizard."
+    },
+    {
+      "path": "function-app/scripts/Run-AzdPreProvision.ps1",
+      "sha256": "43F6FC41FA8F7F461444F47B1FA6B176B2EC7AF462865D9503763F383082AAB6",
+      "reason": "Legacy preprovision checks the selected azd environment before invoking the pinned wizard."
+    }
+  ]
+}

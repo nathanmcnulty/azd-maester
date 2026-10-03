@@ -43,43 +43,9 @@ if (-not (Test-Path -Path $triggerPath -PathType Container)) {
   throw "Timer trigger function directory was not found: $triggerPath"
 }
 
-# Create a staging copy so we can inject optional managed dependencies
-# without modifying the source tree
-$stagingPath = Join-Path -Path $env:TEMP -ChildPath "func-staging-$(Get-Date -Format 'yyyyMMddHHmmss')"
+# Create a unique staging copy without modifying the source tree.
+$stagingPath = Join-Path -Path $env:TEMP -ChildPath "func-staging-$([guid]::NewGuid().ToString('N'))"
 Copy-Item -Path $srcPath -Destination $stagingPath -Recurse -Force
-
-# Dynamically add optional modules to requirements.psd1 so they are installed
-# as managed dependencies (cached in Azure Files) instead of at runtime via
-# Install-Module (ephemeral local disk, lost on every cold start).
-$optionalModules = [ordered]@{}
-if ($IncludeExchange) {
-  $optionalModules['ExchangeOnlineManagement'] = '3.*'
-}
-if ($IncludeTeams) {
-  $optionalModules['MicrosoftTeams'] = '6.*'
-}
-
-if ($optionalModules.Count -gt 0) {
-  $reqPath = Join-Path -Path $stagingPath -ChildPath 'requirements.psd1'
-  $reqContent = Get-Content -Path $reqPath -Raw
-
-  $insertionEntries = @()
-  foreach ($entry in $optionalModules.GetEnumerator()) {
-    $moduleName = $entry.Key
-    $moduleVersion = $entry.Value
-    if ($reqContent -notmatch [regex]::Escape("'$moduleName'")) {
-      $insertionEntries += "    '$moduleName'$((' ' * [Math]::Max(1, 37 - $moduleName.Length)))= '$moduleVersion'"
-    }
-  }
-
-  if ($insertionEntries.Count -gt 0) {
-    # Insert before the closing brace of the hashtable
-    $insertionBlock = ($insertionEntries -join "`n") + "`n"
-    $reqContent = $reqContent -replace '(\r?\n)\}', "`n$insertionBlock}"
-    Set-Content -Path $reqPath -Value $reqContent -Encoding utf8 -NoNewline
-    Write-Host "Added managed dependencies: $($optionalModules.Keys -join ', ')"
-  }
-}
 
 # Adjust functionTimeout in host.json based on hosting plan.
 # Y1 (Consumption) maxes out at 10 minutes. B1/FC1 support longer timeouts.
@@ -106,62 +72,20 @@ if (Test-Path -Path $hostJsonPath) {
   Write-Host "Set functionTimeout to $($hostJson.functionTimeout) for plan $Plan"
 }
 
-# FC1 (Flex Consumption): managed dependencies are not supported on Linux Legion workers.
-# Disable managedDependency in host.json, clear requirements.psd1, and bundle all
-# required modules directly into the Modules/ folder of the deployment package.
-if ($Plan -eq 'FC1') {
-  Write-Host 'FC1 plan: disabling managed dependencies and bundling modules directly.'
+# Bundle exact, SHA-256 verified modules for every hosting plan. Managed
+# dependencies and Save-Module can otherwise drift between deployments.
+$hostJson = Get-Content -LiteralPath $hostJsonPath -Raw | ConvertFrom-Json
+$hostJson.managedDependency = [pscustomobject]@{ enabled = $false }
+$hostJson | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $hostJsonPath -Encoding utf8
+Set-Content -LiteralPath (Join-Path $stagingPath 'requirements.psd1') -Value '@{}' -Encoding utf8
 
-  if (Test-Path -Path $hostJsonPath) {
-    $hostJson = Get-Content -Path $hostJsonPath -Raw | ConvertFrom-Json
-    $hostJson.managedDependency = [pscustomobject]@{ enabled = $false }
-    $hostJson | ConvertTo-Json -Depth 10 | Set-Content -Path $hostJsonPath -Encoding utf8
-    Write-Host 'Disabled managedDependency in host.json for FC1.'
-  }
-
-  $reqPath = Join-Path -Path $stagingPath -ChildPath 'requirements.psd1'
-  Set-Content -Path $reqPath -Value '@{}' -Encoding utf8
-  Write-Host 'Cleared requirements.psd1 for FC1 (modules will be bundled).'
-
-  $modulesPath = Join-Path -Path $stagingPath -ChildPath 'Modules'
-  New-Item -ItemType Directory -Path $modulesPath -Force | Out-Null
-
-  $modulesToBundle = [System.Collections.Generic.List[string]]@(
-    'Az.Accounts', 'Microsoft.Graph.Authentication', 'Maester', 'Pester', 'DnsClient-PS'
-  )
-  if ($IncludeExchange) { $modulesToBundle.Add('ExchangeOnlineManagement') }
-  if ($IncludeTeams)    { $modulesToBundle.Add('MicrosoftTeams') }
-
-  foreach ($moduleName in $modulesToBundle) {
-    Write-Host "Saving module '$moduleName' to bundle..."
-    try {
-      $saveParams = @{
-        Name          = $moduleName
-        Path          = $modulesPath
-        Repository    = 'PSGallery'
-        Force         = $true
-        AcceptLicense = $true
-        ErrorAction   = 'Stop'
-      }
-      if ($moduleName -eq 'Maester') {
-        $saveParams['RequiredVersion'] = '2.2.0'
-      }
-      Save-Module @saveParams
-      $modulePath = Join-Path -Path $modulesPath -ChildPath $moduleName
-      $manifest = if ($moduleName -eq 'Maester') {
-        Get-Item -LiteralPath (Join-Path $modulePath '2.2.0/Maester.psd1') -ErrorAction SilentlyContinue
-      } else {
-        Get-ChildItem -LiteralPath $modulePath -Recurse -File -Filter "$moduleName.psd1" -ErrorAction SilentlyContinue | Select-Object -First 1
-      }
-      if (-not $manifest) {
-        throw "Required module '$moduleName' was not saved with a module manifest."
-      }
-      Write-Host "  Saved '$moduleName'." -ForegroundColor Green
-    } catch {
-      throw "Failed to bundle required module '${moduleName}': $($_.Exception.Message)"
-    }
-  }
-}
+$moduleNames = @('Az.Accounts', 'Microsoft.Graph.Authentication', 'Maester', 'Pester', 'DnsClient-PS')
+if ($IncludeExchange) { $moduleNames += @('ExchangeOnlineManagement', 'PackageManagement', 'PowerShellGet') }
+if ($IncludeTeams) { $moduleNames += 'MicrosoftTeams' }
+$modulesPath = Join-Path $stagingPath 'Modules'
+New-Item -ItemType Directory -Path $modulesPath -Force | Out-Null
+& (Join-Path $PSScriptRoot 'Install-LockedModules.ps1') -LockPath (Join-Path $projectRoot 'runtime-packages.lock.json') -DestinationRoot $modulesPath -PackageNames $moduleNames
+if (-not $?) { throw 'Locked module installer did not complete.' }
 
 $zipFileName = "function-app-deploy-$(Get-Date -Format 'yyyyMMddHHmmss').zip"
 $zipPath = Join-Path -Path $env:TEMP -ChildPath $zipFileName

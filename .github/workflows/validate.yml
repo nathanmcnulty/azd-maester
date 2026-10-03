@@ -25,7 +25,20 @@ jobs:
       - name: Install test dependencies
         run: Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force
       - name: Run repository tests
-        run: Invoke-Pester -Path ./tests -CI
+        run: Invoke-Pester -Path ./tests,./automation-account/tests,./container-app-job/tests,./function-app/tests,./azure-devops/tests -CI
+      - name: Compile all four solution templates
+        run: |
+          az bicep install --version v0.46.1
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install the pinned Bicep CLI.' }
+          foreach ($file in @(
+            'automation-account/infra/main.bicep',
+            'container-app-job/infra/main.bicep',
+            'function-app/infra/main.bicep',
+            'azure-devops/infra/main.bicep'
+          )) {
+            az bicep build --file $file --stdout | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Bicep build failed: $file" }
+          }
       - name: Parse PowerShell
         run: |
           $errors = @()

@@ -26,6 +26,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Resolve-DeploymentTarget.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'Maester-DeploymentEvidence.psm1') -Force
 
 function Get-EnvValue {
@@ -123,13 +124,13 @@ $exoAppRoleAssignmentIdsFromEnv = 'n/a'
 $teamsRoleAssignmentIdsFromEnv = 'n/a'
 $azureRoleAssignmentIdsFromEnv = 'n/a'
 $exoServicePrincipalDisplayNameFromEnv = 'n/a'
-$envValues = @{}
-try {
-  $envValues = (& azd env get-values --output json 2>$null | ConvertFrom-Json -AsHashtable)
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$envJson = & azd env get-values --output json -e $EnvironmentName --cwd $projectRoot 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($envJson | Out-String))) {
+  throw 'The selected azd environment could not be read after setup.'
 }
-catch {
-  $envValues = @{}
-}
+try { $envValues = $envJson | ConvertFrom-Json -AsHashtable }
+catch { throw 'The selected azd environment returned invalid values after setup.' }
 
 if ($envValues.Count -gt 0) {
   $easyAuthAppObjectIdValue = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID'
@@ -218,7 +219,8 @@ if ($needsReplicationWait) {
   }
 }
 
-$automationAccountName = "aa-$($EnvironmentName.ToLower())"
+$automationAccountName = [string]$envValues['automationAccountName']
+if ([string]::IsNullOrWhiteSpace($automationAccountName)) { throw 'Automation account output is missing from the selected azd environment.' }
 $testParams = @{
   SubscriptionId       = $SubscriptionId
   ResourceGroupName    = $ResourceGroupName
@@ -252,11 +254,27 @@ $resourcesPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure
 $resources = @($resourcesPayload.value)
 $customDnsDocsUrl = 'https://learn.microsoft.com/azure/app-service/app-service-web-tutorial-custom-domain'
 
-$automationResource = $resources | Where-Object { $_.type -eq 'Microsoft.Automation/automationAccounts' } | Select-Object -First 1
-$storageResource = $resources | Where-Object { $_.type -eq 'Microsoft.Storage/storageAccounts' } | Select-Object -First 1
-$webAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' } | Select-Object -First 1
-$planResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/serverfarms' } | Select-Object -First 1
-$includeWebAppEffective = [bool]$webAppResource
+if ([string]$envValues['WEB_APP_ENABLED'] -notin @('true', 'false')) { throw 'WEB_APP_ENABLED is missing from the selected azd environment.' }
+$automationResource = Select-ExactMaesterResource -Payload $resourcesPayload -Name $automationAccountName `
+  -ProviderType 'Microsoft.Automation/automationAccounts' -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $ResourceGroupName -EnvironmentName $EnvironmentName -SolutionName 'automation-account'
+$storageResource = Select-ExactMaesterResource -Payload $resourcesPayload -Name ([string]$envValues['STORAGE_ACCOUNT_NAME']) `
+  -ProviderType 'Microsoft.Storage/storageAccounts' -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $ResourceGroupName -EnvironmentName $EnvironmentName -SolutionName 'automation-account'
+$includeWebAppEffective = [string]$envValues['WEB_APP_ENABLED'] -eq 'true'
+$webAppResource = $null
+$planResource = $null
+if ($includeWebAppEffective) {
+  $webAppResource = Select-ExactMaesterResource -Payload $resourcesPayload -Name ([string]$envValues['WEB_APP_NAME']) `
+    -ProviderType 'Microsoft.Web/sites' -SubscriptionId $SubscriptionId `
+    -ResourceGroupName $ResourceGroupName -EnvironmentName $EnvironmentName -SolutionName 'automation-account' -Kind WebApp
+  $planId = [string]$webAppResource.properties.serverFarmId
+  if ($planId) {
+    $plans = @($resources | Where-Object { $_.id -ieq $planId -and $_.type -ieq 'Microsoft.Web/serverfarms' })
+    if ($plans.Count -gt 1) { throw 'The selected Web App plan identity is ambiguous.' }
+    if ($plans.Count -eq 1) { $planResource = $plans[0] }
+  }
+}
 $deploymentModeEffective = if ($includeWebAppEffective) { 'webapp' } else { 'quick' }
 
 $summaryDir = Join-Path -Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path -ChildPath 'outputs'

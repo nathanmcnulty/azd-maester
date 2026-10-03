@@ -10,7 +10,7 @@ schedules:
     - __DEFAULT_BRANCH__
 
 pool:
-  vmImage: windows-latest
+  vmImage: windows-2022
 
 variables:
   ServiceConnection: '__SERVICE_CONNECTION__'
@@ -22,6 +22,7 @@ variables:
   WebAppName: '__WEB_APP_NAME__'
   WebAppResourceGroup: '__WEB_APP_RESOURCE_GROUP__'
   TenantId: '__TENANT_ID__'
+  SubscriptionId: '__SUBSCRIPTION_ID__'
   ClientId: '__CLIENT_ID__'
   MailRecipient: '__MAIL_RECIPIENT__'
   FailOnTestFailures: '__FAIL_ON_TEST_FAILURES__'
@@ -34,15 +35,15 @@ jobs:
   - checkout: self
     fetchDepth: 1
 
-  - task: AzurePowerShell@5
+  - task: AzureCLI@2
     displayName: Run Maester
     inputs:
       azureSubscription: '$(ServiceConnection)'
-      pwsh: true
-      azurePowerShellVersion: LatestVersion
-      ScriptType: FilePath
-      ScriptPath: 'scripts/Invoke-MaesterAzureDevOpsRun.ps1'
-      ScriptArguments: >
+      scriptType: pscore
+      scriptLocation: scriptPath
+      scriptPath: 'scripts/Invoke-MaesterAzureDevOpsRun.ps1'
+      addSpnToEnvironment: true
+      arguments: >
         -IncludeExchange $(IncludeExchange)
         -IncludeTeams $(IncludeTeams)
         -IncludeAzure $(IncludeAzure)
@@ -51,6 +52,7 @@ jobs:
         -WebAppName "$(WebAppName)"
         -WebAppResourceGroup "$(WebAppResourceGroup)"
         -TenantId "$(TenantId)"
+        -SubscriptionId "$(SubscriptionId)"
         -ClientId "$(ClientId)"
         -MailRecipient "$(MailRecipient)"
         -FailOnTestFailures $(FailOnTestFailures)
@@ -66,4 +68,4 @@ jobs:
     inputs:
       testResultsFormat: NUnit
       testResultsFiles: '**/test-results.xml'
-      failTaskOnFailedTests: $(FailOnTestFailures)
+      failTaskOnFailedTests: false

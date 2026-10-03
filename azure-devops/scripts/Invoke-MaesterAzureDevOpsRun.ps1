@@ -25,6 +25,9 @@ param(
   [string]$TenantId,
 
   [Parameter(Mandatory = $false)]
+  [string]$SubscriptionId,
+
+  [Parameter(Mandatory = $false)]
   [string]$ClientId,
 
   [Parameter(Mandatory = $false)]
@@ -161,42 +164,6 @@ function Get-JwtTokenSummary {
   }
 }
 
-function Install-RequiredModule {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$Name,
-
-    [Parameter(Mandatory = $false)]
-    [string]$RequiredVersion
-  )
-
-  $availableModules = @(Get-Module -ListAvailable -Name $Name | Sort-Object Version -Descending)
-  if ($availableModules.Count -gt 0) {
-    if ([string]::IsNullOrWhiteSpace($RequiredVersion)) {
-      return
-    }
-
-    $matchedVersion = $availableModules | Where-Object { $_.Version -eq [version]$RequiredVersion } | Select-Object -First 1
-    if ($matchedVersion) {
-      return
-    }
-  }
-
-  $installParams = @{
-    Name         = $Name
-    Scope        = 'CurrentUser'
-    Force        = $true
-    AllowClobber = $true
-    Repository   = 'PSGallery'
-  }
-
-  if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) {
-    $installParams['RequiredVersion'] = $RequiredVersion
-  }
-
-  Install-Module @installParams -WarningAction SilentlyContinue
-}
-
 function Compress-FileToGzip {
   param(
     [Parameter(Mandatory = $true)]
@@ -231,7 +198,7 @@ function Get-NUnitFailureCount {
   param([Parameter(Mandatory = $true)][string]$Path)
 
   if (-not (Test-Path -Path $Path)) {
-    return 0
+    throw "Required Maester NUnit result file was not generated: $Path"
   }
 
   [xml]$xml = Get-Content -Path $Path -Raw
@@ -243,7 +210,7 @@ function Get-NUnitFailureCount {
     return [int]$xml.testRun.ResultSummary.Counters.failed
   }
 
-  return 0
+  throw "Maester NUnit result file has no recognized failure count: $Path"
 }
 
 $includeExchangeBool = ConvertTo-Bool -Value $IncludeExchange
@@ -251,39 +218,45 @@ $includeTeamsBool = ConvertTo-Bool -Value $IncludeTeams
 $includeWebAppBool = ConvertTo-Bool -Value $IncludeWebApp
 $failOnTestFailuresBool = ConvertTo-Bool -Value $FailOnTestFailures
 
-Write-Host 'Installing required PowerShell modules...'
-$exchangeOnlineModuleVersion = '3.9.2'
-$teamsModuleVersion = '6.9.0'
+Write-Host 'Installing hash-verified PowerShell modules...'
+$lockPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'runtime-packages.lock.json'
+$lock = Get-Content -LiteralPath $lockPath -Raw -ErrorAction Stop | ConvertFrom-Json
+$versions = @{}
+foreach ($package in $lock.packages) { $versions[[string]$package.name] = [string]$package.version }
+$tempRoot = if ([string]::IsNullOrWhiteSpace($env:AGENT_TEMPDIRECTORY)) { [IO.Path]::GetTempPath() } else { $env:AGENT_TEMPDIRECTORY }
+$moduleRoot = Join-Path $tempRoot "maester-modules-$([guid]::NewGuid().ToString('N'))"
+& (Join-Path $PSScriptRoot 'Install-LockedModules.ps1') -LockPath $lockPath -DestinationRoot $moduleRoot
+$env:PSModulePath = "$moduleRoot$([IO.Path]::PathSeparator)$env:PSModulePath"
 
-Install-RequiredModule -Name 'Maester' -RequiredVersion '2.2.0'
-Install-RequiredModule -Name 'Pester'
-Install-RequiredModule -Name 'NuGet'
-Install-RequiredModule -Name 'PackageManagement'
-Install-RequiredModule -Name 'Microsoft.Graph.Authentication'
-Install-RequiredModule -Name 'Az.Accounts'
-Install-RequiredModule -Name 'Az.Storage'
-
-if ($includeExchangeBool) {
-  Install-RequiredModule -Name 'ExchangeOnlineManagement' -RequiredVersion $exchangeOnlineModuleVersion
+foreach ($name in @('PackageManagement', 'PowerShellGet', 'Az.Accounts', 'Az.Storage', 'Microsoft.Graph.Authentication', 'Pester', 'Maester')) {
+  if (-not $versions.ContainsKey($name)) { throw "Runtime package lock is missing '$name'." }
+  Import-Module $name -RequiredVersion $versions[$name] -Force -ErrorAction Stop
 }
-
-if ($includeTeamsBool) {
-  Install-RequiredModule -Name 'MicrosoftTeams' -RequiredVersion $teamsModuleVersion
-}
-
-Import-Module Az.Accounts -Force -WarningAction SilentlyContinue
-Import-Module Az.Storage -Force
 if ($includeExchangeBool) {
-  Import-Module ExchangeOnlineManagement -RequiredVersion $exchangeOnlineModuleVersion -Force
+  Import-Module ExchangeOnlineManagement -RequiredVersion $versions['ExchangeOnlineManagement'] -Force -ErrorAction Stop
 }
 if ($includeTeamsBool) {
-  Import-Module MicrosoftTeams -RequiredVersion $teamsModuleVersion -Force
+  Import-Module MicrosoftTeams -RequiredVersion $versions['MicrosoftTeams'] -Force -ErrorAction Stop
 }
-Import-Module Microsoft.Graph.Authentication -Force
-Import-Module Maester -RequiredVersion '2.2.0' -Force
 if ($includeWebAppBool) {
-  Import-Module Az.Websites -ErrorAction SilentlyContinue
+  Import-Module Az.Websites -RequiredVersion $versions['Az.Websites'] -Force -ErrorAction Stop
 }
+
+if ([string]::IsNullOrWhiteSpace($env:idToken) -or [string]::IsNullOrWhiteSpace($env:servicePrincipalId) -or
+    [string]::IsNullOrWhiteSpace($env:tenantId)) {
+  throw 'Azure DevOps workload identity token was not supplied by the service connection.'
+}
+if ($env:tenantId -ine $TenantId) { throw 'Azure DevOps service connection tenant differs from the configured Maester tenant.' }
+if ([string]::IsNullOrWhiteSpace($ClientId) -or $env:servicePrincipalId -ine $ClientId) {
+  throw 'Azure DevOps service connection application differs from the configured Maester application.'
+}
+$serviceSubscriptionId = (& az account show --query id --output tsv --only-show-errors) -join ''
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($serviceSubscriptionId)) { throw 'Azure CLI did not return the service connection subscription.' }
+if ([string]::IsNullOrWhiteSpace($SubscriptionId) -or $serviceSubscriptionId -ine $SubscriptionId) {
+  throw 'Azure DevOps service connection subscription differs from the configured Maester subscription.'
+}
+Connect-AzAccount -ServicePrincipal -ApplicationId $env:servicePrincipalId -Tenant $env:tenantId `
+  -FederatedToken $env:idToken -Subscription $serviceSubscriptionId -ErrorAction Stop | Out-Null
 
 $azCtx = Get-AzContext -ErrorAction SilentlyContinue
 if ($azCtx -and $azCtx.Subscription) {
@@ -578,6 +551,7 @@ $failureCount = Get-NUnitFailureCount -Path $resultsXmlPath
 if ($failureCount -gt 0) {
   $failureMessage = "$failureCount Maester test(s) failed."
   if ($failOnTestFailuresBool) {
+    Write-Host "AZD_MAESTER_RESULT=FINDINGS;FAILED=$failureCount"
     throw $failureMessage
   }
 

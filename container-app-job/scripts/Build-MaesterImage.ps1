@@ -10,7 +10,13 @@ param(
   [string]$EnvironmentName,
 
   [Parameter(Mandatory = $false)]
-  [string]$ImageTag = 'latest'
+  [string]$ContainerAppJobName,
+
+  [Parameter(Mandatory = $false)]
+  [string]$AcrName,
+
+  [Parameter(Mandatory = $false)]
+  [string]$ImageTag = ([guid]::NewGuid().ToString('N'))
 )
 
 Set-StrictMode -Version Latest
@@ -31,24 +37,83 @@ $resolvedResourceGroupName = if ($ResourceGroupName) { $ResourceGroupName } else
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 # Discover ACR in the resource group
-$acrListJson = & az acr list --resource-group $resolvedResourceGroupName --query '[].{name:name,loginServer:loginServer}' -o json --subscription $SubscriptionId
+$acrListJson = & az acr list --resource-group $resolvedResourceGroupName --query '[].{name:name,loginServer:loginServer,tags:tags}' -o json --subscription $SubscriptionId
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($acrListJson)) {
   throw "Failed to list Azure Container Registries in resource group '$resolvedResourceGroupName'."
 }
 
-$acrList = $acrListJson | ConvertFrom-Json
-if (-not $acrList -or $acrList.Count -eq 0) {
+$acrList = @($acrListJson | ConvertFrom-Json)
+if ($acrList.Count -eq 0) {
   throw "No Azure Container Registry found in resource group '$resolvedResourceGroupName'. Ensure -IncludeACR was set during provisioning."
 }
 
-$acr = $acrList | Where-Object { $_.name -like 'crmaester*' } | Select-Object -First 1
-if (-not $acr) {
-  $acr = $acrList[0]
+$matchingAcr = @()
+if ([string]::IsNullOrWhiteSpace($AcrName)) {
+  $matchingAcr = @($acrList | Where-Object {
+      $tags = if ($_.PSObject.Properties['tags']) { $_.tags } else { $null }
+      $tags -and $tags.PSObject.Properties['environment'] -and
+      $tags.PSObject.Properties['managedBy'] -and
+      $tags.PSObject.Properties['workload'] -and
+      $tags.PSObject.Properties['solution'] -and
+      $tags.environment -eq $EnvironmentName.ToLowerInvariant() -and
+      $tags.managedBy -eq 'azd' -and $tags.workload -eq 'maester' -and
+      $tags.solution -eq 'container-app-job'
+    })
 }
+else {
+  $matchingAcr = @($acrList | Where-Object { $_.name -eq $AcrName })
+}
+if ($matchingAcr.Count -ne 1) {
+  throw "Could not identify one Maester Azure Container Registry in resource group '$resolvedResourceGroupName'. Pass -AcrName from the deployment output."
+}
+$acr = $matchingAcr[0]
 
 $acrName = $acr.name
 $acrLoginServer = $acr.loginServer
 $imageFqdn = "${acrLoginServer}/maester:${ImageTag}"
+
+# Resolve the deployed job before starting an image build. Bicep includes a
+# resource-group-derived suffix in its name, so it cannot be reconstructed here.
+$armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($armToken)) {
+  throw "Failed to acquire an Azure management token for subscription '$SubscriptionId'."
+}
+$armHeaders = @{ Authorization = "Bearer $armToken" }
+$jobsBasePath = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.App/jobs"
+if ([string]::IsNullOrWhiteSpace($ContainerAppJobName)) {
+  $jobsPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com${jobsBasePath}?api-version=2024-03-01" -Headers $armHeaders
+  if ($jobsPayload.PSObject.Properties['nextLink'] -and $jobsPayload.nextLink) {
+    throw "Container App Job list is incomplete in resource group '$resolvedResourceGroupName'. Pass -ContainerAppJobName."
+  }
+  $jobs = @($jobsPayload.value)
+  $matchingJobs = @($jobs | Where-Object {
+      $tags = if ($_.PSObject.Properties['tags']) { $_.tags } else { $null }
+      $tags -and $tags.PSObject.Properties['environment'] -and
+      $tags.PSObject.Properties['managedBy'] -and
+      $tags.PSObject.Properties['workload'] -and
+      $tags.environment -eq $EnvironmentName.ToLower() -and
+      $tags.managedBy -eq 'azd' -and $tags.workload -eq 'maester'
+    })
+  if ($matchingJobs.Count -eq 1) {
+    $ContainerAppJobName = $matchingJobs[0].name
+  }
+  else {
+    throw "Could not identify one Maester Container App Job in resource group '$resolvedResourceGroupName'. Pass -ContainerAppJobName."
+  }
+}
+if ($ContainerAppJobName -notmatch '^[a-zA-Z0-9][a-zA-Z0-9-]*$') {
+  throw "Invalid Container App Job name '$ContainerAppJobName'."
+}
+$jobPath = "${jobsBasePath}/${ContainerAppJobName}?api-version=2024-03-01"
+try {
+  $jobPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$jobPath" -Headers $armHeaders
+}
+catch {
+  throw "Failed to read Container App Job '$ContainerAppJobName': $($_.Exception.Message)"
+}
+if (-not $jobPayload -or -not $jobPayload.properties.template.containers) {
+  throw "Container App Job '$ContainerAppJobName' has no container template."
+}
 
 Write-Host "Building and pushing Maester image to ACR '$acrName'..."
 Write-Host "Image: $imageFqdn"
@@ -67,19 +132,21 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Image built and pushed: $imageFqdn"
 
-# Update the Container App Job to use the ACR image
-$preferredJobName = "caj-maester-$($EnvironmentName.ToLower())"
-Write-Host "Updating Container App Job '$preferredJobName' to use image '$imageFqdn'..."
+# Resolve the just-built tag to an immutable manifest before updating the job.
+$imageDigest = (& az acr manifest show-metadata `
+  --registry $acrName `
+  --name "maester:${ImageTag}" `
+  --subscription $SubscriptionId `
+  --query digest `
+  --output tsv `
+  --only-show-errors) -join ''
+if ($LASTEXITCODE -ne 0 -or $imageDigest -notmatch '^sha256:[a-fA-F0-9]{64}$') {
+  throw "ACR did not return a valid digest for newly built image 'maester:${ImageTag}'."
+}
+$imageFqdn = "${acrLoginServer}/maester@$imageDigest"
 
-$jobPath = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.App/jobs/${preferredJobName}?api-version=2024-03-01"
-$armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
-$armHeaders = @{ Authorization = "Bearer $armToken" }
-try {
-  $jobPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$jobPath" -Headers $armHeaders
-}
-catch {
-  throw "Failed to read Container App Job '$preferredJobName': $($_.Exception.Message)"
-}
+# Update the Container App Job to use the ACR image
+Write-Host "Updating Container App Job '$ContainerAppJobName' to use image '$imageFqdn'..."
 $jobPayload.properties.template.containers[0].image = $imageFqdn
 
 # Configure ACR registry on the job (not done during Bicep to avoid circular dependency)
@@ -110,4 +177,4 @@ catch {
   throw "Failed to update Container App Job image: $($_.Exception.Message)"
 }
 
-Write-Host "Container App Job '$preferredJobName' updated to image '$imageFqdn'."
+Write-Host "Container App Job '$ContainerAppJobName' updated to image '$imageFqdn'."

@@ -1,202 +1,120 @@
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)]
-  [string]$SubscriptionId,
-
-  [Parameter(Mandatory = $false)]
+  [Parameter(Mandatory)][string]$SubscriptionId,
   [string]$TenantId,
-
-  [Parameter(Mandatory = $true)]
-  [string]$ResourceGroupName,
-
-  [Parameter(Mandatory = $false)]
+  [Parameter(Mandatory)][string]$ResourceGroupName,
   [string]$FunctionAppName,
-
-  [int]$TimeoutMinutes = 15,
-
+  [string]$StorageAccountName,
+  [ValidateRange(1, 120)][int]$TimeoutMinutes = 15,
   [switch]$PassThru
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'vendor/Azd.MaesterHooks/Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'FunctionValidation.Core.psm1') -Force
 
-$azAccount = Get-AzCliSubscriptionContext -SubscriptionId $SubscriptionId -TenantId $TenantId
-if (-not $TenantId) { $TenantId = $azAccount.tenantId }
-$armToken = az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
+if (-not $FunctionAppName) { $FunctionAppName = $env:FUNCTION_APP_NAME }
+if (-not $StorageAccountName) { $StorageAccountName = $env:STORAGE_ACCOUNT_NAME }
+if ($FunctionAppName -notmatch '^[a-zA-Z0-9-]+$' -or $StorageAccountName -notmatch '^[a-z0-9]+$') {
+  throw 'Validation requires exact FunctionAppName and StorageAccountName from the deployed environment.'
+}
+
+$account = Get-AzCliSubscriptionContext -SubscriptionId $SubscriptionId -TenantId $TenantId
+if (-not $TenantId) { $TenantId = $account.tenantId }
+$armToken = & az account get-access-token --subscription $SubscriptionId --resource https://management.azure.com/ --query accessToken -o tsv
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($armToken)) { throw 'Could not acquire ARM token for validation.' }
 $armHeaders = @{ Authorization = "Bearer $armToken" }
 
-# Discover function app if not specified
-if ([string]::IsNullOrWhiteSpace($FunctionAppName)) {
-  $sitesPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites?api-version=2023-12-01"
-  $sitesPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$sitesPath" -Headers $armHeaders
-  $funcSite = @($sitesPayload.value | Where-Object { $_.kind -like '*functionapp*' }) | Select-Object -First 1
-  if (-not $funcSite) {
-    throw "No Function App was found in resource group '$ResourceGroupName'."
-  }
-  $FunctionAppName = $funcSite.name
+# Exact target GETs prevent a stale environment setting from silently choosing a
+# different resource in a group with multiple apps or storage accounts.
+$sitePath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/${FunctionAppName}?api-version=2023-12-01"
+$site = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$sitePath" -Headers $armHeaders -ErrorAction Stop
+if ($site.name -ne $FunctionAppName -or $site.kind -notlike '*functionapp*') {
+  throw "The selected resource '$FunctionAppName' is not the expected Function App."
 }
+$storagePath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Storage/storageAccounts/$StorageAccountName" + '?api-version=2023-05-01'
+$storage = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$storagePath" -Headers $armHeaders -ErrorAction Stop
+if ($storage.name -ne $StorageAccountName) { throw "The selected storage account '$StorageAccountName' was not found." }
 
-Write-Host "Validating Function App '$FunctionAppName'..."
-
-# Get master key via Azure REST API
 $keysPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$FunctionAppName/host/default/listkeys?api-version=2023-12-01"
-$keysPayload = Invoke-RestMethod -Method POST -Uri "https://management.azure.com$keysPath" -Headers $armHeaders -Body '{}' -ContentType 'application/json'
-$masterKey = $keysPayload.masterKey
-if ([string]::IsNullOrWhiteSpace($masterKey)) {
-  throw "Master key was not found in Function App host keys response."
+$keys = Invoke-RestMethod -Method POST -Uri "https://management.azure.com$keysPath" -Headers $armHeaders -Body '{}' -ContentType 'application/json' -ErrorAction Stop
+$masterKey = $keys.masterKey
+if ([string]::IsNullOrWhiteSpace($masterKey)) { throw 'Function App master key was not returned.' }
+
+$storageToken = & az account get-access-token --subscription $SubscriptionId --resource https://storage.azure.com/ --query accessToken -o tsv
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($storageToken)) { throw 'Could not acquire storage token for validation.' }
+$blobHeaders = @{ Authorization = "Bearer $storageToken"; 'x-ms-version' = '2021-12-02' }
+
+function Get-HttpStatusCode {
+  param($ErrorRecord)
+  $exception = $ErrorRecord.Exception
+  while ($exception) {
+    if ($exception.PSObject.Properties['Response'] -and $exception.Response -and
+        $exception.Response.PSObject.Properties['StatusCode']) {
+      return [int]$exception.Response.StatusCode
+    }
+    $exception = $exception.InnerException
+  }
+  return $null
 }
 
-# Trigger the function via admin API (with retry for post-deployment startup)
-$triggerUrl = "https://$FunctionAppName.azurewebsites.net/admin/functions/MaesterTimerTrigger"
-Write-Host "Triggering function: POST $triggerUrl"
+$validationId = [guid]::NewGuid()
+$receiptUrl = "https://$StorageAccountName.blob.core.windows.net/validation/$($validationId.ToString('D')).json"
+try {
+  Invoke-WebRequest -Method HEAD -Uri $receiptUrl -Headers $blobHeaders -UseBasicParsing -ErrorAction Stop | Out-Null
+  throw 'The newly generated validation receipt already exists; refusing to reuse it.'
+}
+catch {
+  if ((Get-HttpStatusCode $_) -ne 404) { throw }
+}
 
-$triggerMaxWaitMinutes = 10
-$triggerDeadline = (Get-Date).AddMinutes($triggerMaxWaitMinutes)
-$triggerRetryInterval = 20
-$triggerAccepted = $false
-
+$triggerUrl = "https://$FunctionAppName.azurewebsites.net/admin/functions/MaesterValidationTrigger"
+$body = @{ input = $validationId.ToString('D') } | ConvertTo-Json -Compress
+$triggerDeadline = (Get-Date).AddMinutes(10)
+$accepted = $false
 while ((Get-Date) -lt $triggerDeadline) {
   try {
-    $triggerResponse = Invoke-WebRequest -Uri $triggerUrl -Method POST -Headers @{
+    $response = Invoke-WebRequest -Uri $triggerUrl -Method POST -Headers @{
       'x-functions-key' = $masterKey
-      'Content-Type'    = 'application/json'
-    } -Body '{}' -UseBasicParsing -ErrorAction Stop
-
-    if ($triggerResponse.StatusCode -in @(200, 202, 204)) {
-      Write-Host "Function trigger accepted (HTTP $($triggerResponse.StatusCode))."
-      $triggerAccepted = $true
-      break
-    }
+      'Content-Type' = 'application/json'
+    } -Body $body -UseBasicParsing -ErrorAction Stop
+    if ([int]$response.StatusCode -ne 202) { throw "Validation trigger returned unexpected HTTP $($response.StatusCode)." }
+    $accepted = $true
+    break
   }
   catch {
-    $statusCode = $null
-    if ($_.Exception.Response) {
-      $statusCode = [int]$_.Exception.Response.StatusCode
-    }
-
-    if ($statusCode -eq 202) {
-      Write-Host 'Function trigger accepted (HTTP 202).'
-      $triggerAccepted = $true
-      break
-    }
-
-    if ($statusCode -in @(404, 500, 502, 503, 504)) {
-      $remainingMinutes = [math]::Round(($triggerDeadline - (Get-Date)).TotalMinutes, 1)
-      Write-Host "Function not ready yet (HTTP $statusCode). Waiting for startup... ($remainingMinutes min remaining)"
-      Start-Sleep -Seconds $triggerRetryInterval
-      continue
-    }
-
-    throw "Failed to trigger function. HTTP ${statusCode}: $($_.Exception.Message)"
+    $code = Get-HttpStatusCode $_
+    if ($code -notin @(404, 500, 502, 503, 504)) { throw }
+    Start-Sleep -Seconds 20
   }
 }
+if (-not $accepted) { throw 'Validation trigger did not become available within ten minutes.' }
 
-if (-not $triggerAccepted) {
-  throw "Function trigger endpoint did not become available within $triggerMaxWaitMinutes minutes. The function app may still be installing managed dependencies."
-}
-
-# Poll function invocations for completion
-Write-Host "Waiting for function execution to complete (timeout: $TimeoutMinutes minutes)..."
 $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
-$functionStatus = 'Running'
-$pollInterval = 15
-$lastInvocationId = $null
-$lastInvocationStatus = $null
-
-# Wait a few seconds for the invocation to register
-Start-Sleep -Seconds 10
-
-do {
+while ((Get-Date) -lt $deadline) {
   try {
-    # Check recent invocations via the function admin API
-    $invocationsUrl = "https://$FunctionAppName.azurewebsites.net/admin/functions/MaesterTimerTrigger/status"
-    $statusResponse = Invoke-RestMethod -Uri $invocationsUrl -Method GET -Headers @{
-      'x-functions-key' = $masterKey
-    } -ErrorAction SilentlyContinue
-
-    if ($statusResponse -and $statusResponse.isRunning -eq $false) {
-      $functionStatus = 'Succeeded'
-      Write-Host "Function execution completed."
-      break
+    $receipt = Invoke-RestMethod -Method GET -Uri $receiptUrl -Headers $blobHeaders -ErrorAction Stop
+    Assert-MaesterValidationReceipt -Receipt $receipt -ValidationId $validationId | Out-Null
+    $result = [pscustomobject]@{
+      ValidationPassed = $true
+      ExecutionComplete = $true
+      FunctionAppName = $FunctionAppName
+      FinalStatus = 'Succeeded'
+      ValidationId = $validationId.ToString('D')
+      InvocationId = $receipt.invocationId
+      SubscriptionId = $SubscriptionId
+      ResourceGroupName = $ResourceGroupName
+      CompletedAt = (Get-Date).ToUniversalTime().ToString('o')
     }
-    elseif ($statusResponse -and $statusResponse.isRunning -eq $true) {
-      Write-Host "Function is still running..."
-    }
+    Write-Host "Function validation completed for request '$validationId'."
+    if ($PassThru) { return $result }
+    return
   }
   catch {
-    # Status endpoint may not be available on all runtime versions
-    # Fall back to checking blob output
-    Write-Verbose "Status check returned error: $($_.Exception.Message)"
+    if ((Get-HttpStatusCode $_) -ne 404) { throw }
   }
-
-  # Alternative: check if a recent blob appeared in the archive container
-  try {
-    $storageQuery = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Storage/storageAccounts?api-version=2023-05-01"
-    $storagePayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$storageQuery" -Headers $armHeaders -ErrorAction SilentlyContinue
-    $storage = @($storagePayload.value | Where-Object { $_.name -like 'stmaester*' }) | Select-Object -First 1
-    if (-not $storage) {
-      $storage = $storagePayload.value | Select-Object -First 1
-    }
-
-    if ($storage) {
-      $storageName = $storage.name
-
-      # List blobs in latest container to see if latest.html was recently updated
-      $plainToken = az account get-access-token --subscription $SubscriptionId --resource https://storage.azure.com/ --query accessToken -o tsv 2>$null
-
-      $blobHeaders = @{
-        'Authorization' = "Bearer $plainToken"
-        'x-ms-version'  = '2021-12-02'
-      }
-
-      $latestBlobUrl = "https://$storageName.blob.core.windows.net/latest/latest.html"
-      try {
-        $blobPropsResponse = Invoke-WebRequest -Uri $latestBlobUrl -Method HEAD -Headers $blobHeaders -UseBasicParsing -ErrorAction Stop
-        $lastModifiedHeader = $blobPropsResponse.Headers['Last-Modified']
-        if ($lastModifiedHeader) {
-          $lastModified = [DateTime]::Parse($lastModifiedHeader)
-          $minutesAgo = ((Get-Date).ToUniversalTime() - $lastModified.ToUniversalTime()).TotalMinutes
-          if ($minutesAgo -lt 3) {
-            $functionStatus = 'Succeeded'
-            Write-Host "Function execution completed (detected fresh blob output, modified $([math]::Round($minutesAgo, 1)) minutes ago)."
-            break
-          }
-        }
-      }
-      catch {
-        # Blob may not exist yet
-      }
-    }
-  }
-  catch {
-    Write-Verbose "Blob check failed: $($_.Exception.Message)"
-  }
-
-  Start-Sleep -Seconds $pollInterval
-  Write-Host "Waiting for function execution... ($(([math]::Round(($deadline - (Get-Date)).TotalMinutes, 1))) minutes remaining)"
-} while ((Get-Date) -lt $deadline)
-
-if ($functionStatus -ne 'Succeeded') {
-  Write-Warning "Function App execution did not complete within $TimeoutMinutes minutes. Final status: $functionStatus. On Consumption plan, the first cold-start run may exceed the function timeout while managed dependencies are being installed. Subsequent timer-triggered runs will use cached modules and complete much faster."
+  Start-Sleep -Seconds 15
 }
-else {
-  Write-Host 'Function App execution completed successfully.'
-}
-
-Write-Host 'Function App validation completed (trigger accepted).'
-
-$result = [pscustomobject]@{
-  ValidationPassed  = $triggerAccepted
-  ExecutionComplete = ($functionStatus -eq 'Succeeded')
-  FunctionAppName   = $FunctionAppName
-  FinalStatus       = $functionStatus
-  SubscriptionId    = $SubscriptionId
-  ResourceGroupName = $ResourceGroupName
-  CompletedAt       = (Get-Date).ToString('o')
-}
-
-if ($PassThru) {
-  return $result
-}
+throw "Function validation request '$validationId' has no completed receipt after $TimeoutMinutes minutes."

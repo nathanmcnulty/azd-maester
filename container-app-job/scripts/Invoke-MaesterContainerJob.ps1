@@ -109,50 +109,18 @@ function Publish-WebAppContent {
   Write-Output "Published latest report to Web App '$AppName' as index.html"
 }
 
-function Test-ModuleInstalled {
-  param(
-    [Parameter(Mandatory = $true)][string]$ModuleName,
-    [Parameter(Mandatory = $false)][string]$RequiredVersion
-  )
-
-  $availableModules = @(Get-Module -ListAvailable -Name $ModuleName -ErrorAction SilentlyContinue)
-  if ([string]::IsNullOrWhiteSpace($RequiredVersion) -and $availableModules.Count -gt 0) {
-    return
-  }
-  if (-not [string]::IsNullOrWhiteSpace($RequiredVersion) -and ($availableModules | Where-Object { $_.Version -eq [version]$RequiredVersion })) {
-    return
-  }
-
-  Write-Output "Installing module '$ModuleName'..."
-  $installParams = @{
-    Name         = $ModuleName
-    Force        = $true
-    Scope        = 'CurrentUser'
-    Repository   = 'PSGallery'
-    AllowClobber = $true
-    ErrorAction  = 'Stop'
-  }
-  if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) {
-    $installParams['RequiredVersion'] = $RequiredVersion
-  }
-  Install-Module @installParams
-}
-
 # ──────────────────────────────────────────────
-# Bootstrap: install required modules if not already in the image
+# Bootstrap exact, hash-verified runtime modules if using the public base image.
 # ──────────────────────────────────────────────
 
 Write-Output "Starting Maester container job at $(Get-Date -Format 'u')"
 
-Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
-
-$requiredModules = @(
-  'Az.Accounts',
-  'Microsoft.Graph.Authentication',
-  'Maester',
-  'Pester',
-  'DnsClient-PS'
-)
+$lockPath = Join-Path $PSScriptRoot 'runtime-packages.lock.json'
+$installerPath = Join-Path $PSScriptRoot 'Install-LockedModules.ps1'
+$packageLock = Get-Content -LiteralPath $lockPath -Raw -ErrorAction Stop | ConvertFrom-Json
+$moduleVersions = @{}
+foreach ($package in $packageLock.packages) { $moduleVersions[[string]$package.name] = [string]$package.version }
+$requiredModules = @('Az.Accounts', 'Microsoft.Graph.Authentication', 'Pester', 'Maester', 'DnsClient-PS')
 
 # Read config from environment variables
 $StorageAccountName = $env:STORAGE_ACCOUNT_NAME
@@ -172,12 +140,20 @@ if ($includeTeams) {
   $requiredModules += 'MicrosoftTeams'
 }
 
-foreach ($mod in $requiredModules) {
-  if ($mod -eq 'Maester') {
-    Test-ModuleInstalled -ModuleName $mod -RequiredVersion '2.2.0'
-  }
-  else {
-    Test-ModuleInstalled -ModuleName $mod
+$missing = @()
+foreach ($moduleName in $requiredModules) {
+  if (-not $moduleVersions.ContainsKey($moduleName)) { throw "Runtime package lock is missing '$moduleName'." }
+  $installed = @(Get-Module -ListAvailable -Name $moduleName -ErrorAction SilentlyContinue |
+    Where-Object { $_.Version -eq [version]$moduleVersions[$moduleName] })
+  if ($installed.Count -eq 0) { $missing += $moduleName }
+}
+if ($missing.Count -gt 0) {
+  $userModuleRoot = Join-Path $HOME '.local/share/powershell/Modules'
+  & $installerPath -LockPath $lockPath -DestinationRoot $userModuleRoot
+}
+foreach ($moduleName in $requiredModules) {
+  if (-not @(Get-Module -ListAvailable -Name $moduleName | Where-Object { $_.Version -eq [version]$moduleVersions[$moduleName] }).Count) {
+    throw "Required module '$moduleName/$($moduleVersions[$moduleName])' was not installed."
   }
 }
 
@@ -185,10 +161,9 @@ foreach ($mod in $requiredModules) {
 # Authenticate and connect
 # ──────────────────────────────────────────────
 
-Import-Module Az.Accounts -Force -ErrorAction Stop
-Import-Module Microsoft.Graph.Authentication -Force -ErrorAction Stop
-Import-Module Maester -RequiredVersion '2.2.0' -Force -ErrorAction Stop
-Import-Module Pester -Force -ErrorAction Stop
+foreach ($moduleName in $requiredModules) {
+  Import-Module $moduleName -RequiredVersion $moduleVersions[$moduleName] -Force -ErrorAction Stop
+}
 
 Connect-AzAccount -Identity -ErrorAction Stop | Out-Null
 Connect-MgGraph -Identity -NoWelcome -ErrorAction Stop | Out-Null

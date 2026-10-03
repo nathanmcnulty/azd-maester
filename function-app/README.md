@@ -1,4 +1,4 @@
-﻿# Function App azd solution
+# Function App azd solution
 
 Deploys a production-style Maester automation solution on Azure with:
 
@@ -106,6 +106,7 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 ## Script map
 
 - azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
+- Direct preprovision, setup, and postprovision runs require selecting the target with `azd env select <env>` and passing `-EnvironmentName <env>`; the hook verifies that selection and its Azure scope before changes.
 - Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-FunctionValidation.ps1`
 - Function deployment: `scripts/Deploy-FunctionCode.ps1`
 
@@ -113,7 +114,8 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 
 - Weekly schedule (Sunday midnight UTC). To run at a different time or frequency, edit the `schedule` value in `src/MaesterTimerTrigger/function.json` (e.g. `"0 30 6 * * 1"` for Monday 6:30 UTC), then re-deploy the function code.
 - Default plan: FC1 (Flex Consumption) — serverless, pay-per-execution, 30-minute timeout. Alternatively set `FUNCTION_APP_PLAN` to `Y1` (Consumption, 10-minute max) or `B1` (App Service Basic, no timeout limit)
-- FC1 does not use managed dependencies; modules are bundled into the deployment zip by `scripts/Deploy-FunctionCode.ps1`. Y1/B1 use `requirements.psd1` for auto-installation.
+- Every hosting plan bundles exact SHA-256 verified modules from `runtime-packages.lock.json`; managed dependencies are disabled. The Functions host uses the constrained 4.32.0 extension bundle from Microsoft's CDN.
+- On-demand validation triggers `MaesterValidationTrigger` with a new request ID and requires a matching private `validation/<request ID>.json` completion receipt. Missing, failed, or timed-out executions fail validation.
 - Runner script: `src/MaesterTimerTrigger/run.ps1`
 - Outputs:
   - `archive/maester-report-<timestamp>.html.gz`

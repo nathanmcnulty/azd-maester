@@ -51,25 +51,22 @@ function Get-EnvValue {
   return $null
 }
 
-$envLines = @{}
-try {
-  $envLines = (& azd env get-values --output json 2>$null | ConvertFrom-Json -AsHashtable)
+if (-not $EnvironmentName) {
+  $EnvironmentName = if ($env:AZURE_ENV_NAME) { $env:AZURE_ENV_NAME } else { 'dev' }
 }
-catch {
-  $envLines = @{}
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$envJson = & azd env get-values --output json -e $EnvironmentName --cwd $projectRoot 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($envJson | Out-String))) {
+  throw 'The selected azd environment could not be read.'
 }
+try { $envLines = $envJson | ConvertFrom-Json -AsHashtable }
+catch { throw 'The selected azd environment returned invalid values.' }
 
 if (-not $SubscriptionId) {
   $SubscriptionId = if ($env:AZURE_SUBSCRIPTION_ID) { $env:AZURE_SUBSCRIPTION_ID } else { Get-EnvValue -Lines $envLines -Name 'AZURE_SUBSCRIPTION_ID' }
 }
 if (-not $TenantId) {
   $TenantId = if ($env:AZURE_TENANT_ID) { $env:AZURE_TENANT_ID } else { Get-EnvValue -Lines $envLines -Name 'AZURE_TENANT_ID' }
-}
-if (-not $EnvironmentName) {
-  $EnvironmentName = if ($env:AZURE_ENV_NAME) { $env:AZURE_ENV_NAME } else { Get-EnvValue -Lines $envLines -Name 'AZURE_ENV_NAME' }
-  if ([string]::IsNullOrWhiteSpace($EnvironmentName)) {
-    $EnvironmentName = 'dev'
-  }
 }
 if (-not $ResourceGroupName) {
   $ResourceGroupName = if ($env:AZURE_RESOURCE_GROUP) { $env:AZURE_RESOURCE_GROUP } else { Get-EnvValue -Lines $envLines -Name 'AZURE_RESOURCE_GROUP' }

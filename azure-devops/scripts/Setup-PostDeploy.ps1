@@ -479,32 +479,40 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
 
 Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Resolve-DeploymentTarget.psm1') -Force
 Import-Module Az.Accounts -Force
+
+function Set-AzdEnvValue {
+  param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][AllowEmptyString()][string]$Value)
+  Set-MaesterAzdValue -EnvironmentName $EnvironmentName -ProjectRoot $projectRoot -Name $Name -Value $Value
+}
+
+function Set-AzdEnvJsonArray {
+  param([Parameter(Mandatory)][string]$Name, [AllowEmptyCollection()][string[]]$Values = @())
+  $serialized = (@($Values) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique) -join ';'
+  Set-AzdEnvValue -Name $Name -Value $serialized
+}
 
 $adopsInstallMessage = "PowerShell module 'ADOPS' is required to configure Azure DevOps. Install now to continue postprovision setup."
 if (-not (Test-ModuleAvailable -ModuleName 'ADOPS' -InstallMessage $adopsInstallMessage)) {
   throw "PowerShell module 'ADOPS' is required for postprovision setup. Install it with: Install-Module ADOPS -Scope CurrentUser -Force -AllowClobber"
 }
 
-$envLines = @{}
-try {
-  $envLines = (& azd env get-values --output json 2>$null | ConvertFrom-Json -AsHashtable)
+if (-not $EnvironmentName) {
+  $EnvironmentName = if ($env:AZURE_ENV_NAME) { $env:AZURE_ENV_NAME } else { 'dev' }
 }
-catch {
-  $envLines = @{}
+$envJson = & azd env get-values --output json -e $EnvironmentName --cwd $projectRoot 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($envJson | Out-String))) {
+  throw 'The selected azd environment could not be read.'
 }
+try { $envLines = $envJson | ConvertFrom-Json -AsHashtable }
+catch { throw 'The selected azd environment returned invalid values.' }
 
 if (-not $SubscriptionId) {
   $SubscriptionId = if ($env:AZURE_SUBSCRIPTION_ID) { $env:AZURE_SUBSCRIPTION_ID } else { Get-EnvValue -Lines $envLines -Name 'AZURE_SUBSCRIPTION_ID' }
 }
 if (-not $TenantId) {
   $TenantId = if ($env:AZURE_TENANT_ID) { $env:AZURE_TENANT_ID } else { Get-EnvValue -Lines $envLines -Name 'AZURE_TENANT_ID' }
-}
-if (-not $EnvironmentName) {
-  $EnvironmentName = if ($env:AZURE_ENV_NAME) { $env:AZURE_ENV_NAME } else { Get-EnvValue -Lines $envLines -Name 'AZURE_ENV_NAME' }
-  if ([string]::IsNullOrWhiteSpace($EnvironmentName)) {
-    $EnvironmentName = 'dev'
-  }
 }
 if (-not $ResourceGroupName) {
   $ResourceGroupName = if ($env:AZURE_RESOURCE_GROUP) { $env:AZURE_RESOURCE_GROUP } else { Get-EnvValue -Lines $envLines -Name 'AZURE_RESOURCE_GROUP' }
@@ -609,6 +617,8 @@ if (-not $PSBoundParameters.ContainsKey('FailOnTestFailures')) {
 }
 
 $SubscriptionId = Test-RequiredValue -Value $SubscriptionId -Name 'SubscriptionId'
+$deploymentValues = Assert-MaesterAzdTarget -EnvironmentName $EnvironmentName -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $ResourceGroupName -ProjectRoot $projectRoot
 $AdoOrganization = Test-RequiredValue -Value $AdoOrganization -Name 'AdoOrganization'
 $AdoProject = Test-RequiredValue -Value $AdoProject -Name 'AdoProject'
 $AdoRepositoryName = Test-RequiredValue -Value $AdoRepositoryName -Name 'AdoRepositoryName'
@@ -653,6 +663,23 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($subscriptionName)) {
   else {
     throw 'Could not determine subscription name from current Azure context.'
   }
+}
+
+$resourcesPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/resources?api-version=2021-04-01"
+$resourcesResponse = Invoke-AzRestMethod -Method GET -Path $resourcesPath
+if ($resourcesResponse.StatusCode -ne 200) { throw 'The selected resource group inventory could not be verified.' }
+$resourcesPayload = $resourcesResponse.Content | ConvertFrom-Json
+$resources = @($resourcesPayload.value)
+$storageResource = Select-ExactMaesterResource -Payload $resourcesPayload -Name ([string]$deploymentValues['STORAGE_ACCOUNT_NAME']) `
+  -ProviderType 'Microsoft.Storage/storageAccounts' -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $ResourceGroupName -EnvironmentName $EnvironmentName -SolutionName 'azure-devops'
+if ([string]$deploymentValues['WEB_APP_ENABLED'] -notin @('true', 'false')) { throw 'WEB_APP_ENABLED must be supplied by the deployment output.' }
+$webAppResource = $null
+if ([string]$deploymentValues['WEB_APP_ENABLED'] -eq 'true') {
+  $webAppResource = Select-ExactMaesterResource -Payload $resourcesPayload -Name ([string]$deploymentValues['WEB_APP_NAME']) `
+    -ProviderType 'Microsoft.Web/sites' -SubscriptionId $SubscriptionId `
+    -ResourceGroupName $ResourceGroupName -EnvironmentName $EnvironmentName `
+    -SolutionName 'azure-devops' -Kind WebApp
 }
 
 Write-Host 'Connecting to Azure DevOps with ADOPS and OAuth token...'
@@ -768,20 +795,17 @@ $workloadIdentityDisplayName = "sc-app-maester-$($EnvironmentName.ToLower())"
 $appRegistrationAppId = [string](Get-OptionalPropertyValue -InputObject $serviceConnectionParameters -PropertyNames @('serviceprincipalid', 'servicePrincipalId', 'servicePrincipalID'))
 $aadApplication = $null
 if (-not [string]::IsNullOrWhiteSpace($appRegistrationAppId)) {
-  try {
-    $appByIdResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=appId eq '$appRegistrationAppId'&`$select=id,appId,displayName"
-    $appByIdMatches = @($appByIdResponse.value)
-    if ($appByIdMatches.Count -gt 0) {
-      $appById = $appByIdMatches[0]
-      $aadApplication = [pscustomobject]@{
-        Id          = $appById.id
-        AppId       = $appById.appId
-        DisplayName = $appById.displayName
-      }
-    }
+  if ($appRegistrationAppId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+    throw 'The service connection returned an invalid application ID.'
   }
-  catch {
-    $aadApplication = $null
+  $appByIdResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=appId eq '$appRegistrationAppId'&`$select=id,appId,displayName"
+  $appById = Select-UniqueGraphApplication -Response $appByIdResponse -ExpectedValue $appRegistrationAppId -MatchBy AppId
+  if ($appById) {
+    $aadApplication = [pscustomobject]@{
+      Id          = $appById.id
+      AppId       = $appById.appId
+      DisplayName = $appById.displayName
+    }
   }
 }
 
@@ -791,18 +815,10 @@ if ($aadApplication -and -not [string]::IsNullOrWhiteSpace($aadApplication.Displ
 }
 
 if (-not $aadApplication) {
-  $existingApps = @()
-  try {
-    $displayNameFilterValue = $workloadIdentityDisplayName -replace "'", "''"
-    $existingAppsResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$displayNameFilterValue'&`$select=id,appId,displayName"
-    $existingApps = @($existingAppsResponse.value)
-  }
-  catch {
-    $existingApps = @()
-  }
-
-  if ($existingApps.Count -gt 0) {
-    $existingApp = $existingApps[0]
+  $displayNameFilterValue = $workloadIdentityDisplayName -replace "'", "''"
+  $existingAppsResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$displayNameFilterValue'&`$select=id,appId,displayName"
+  $existingApp = Select-UniqueGraphApplication -Response $existingAppsResponse -ExpectedValue $workloadIdentityDisplayName
+  if ($existingApp) {
     $aadApplication = [pscustomobject]@{
       Id          = $existingApp.id
       AppId       = $existingApp.appId
@@ -909,16 +925,6 @@ Set-AzdEnvValue -Name 'AZDO_WORKLOAD_APP_ID' -Value $aadApplication.AppId
 Set-AzdEnvValue -Name 'AZDO_WORKLOAD_APP_OBJECT_ID' -Value $aadApplication.Id
 Set-AzdEnvValue -Name 'AZDO_WORKLOAD_SERVICE_PRINCIPAL_OBJECT_ID' -Value $servicePrincipal.Id
 Set-AzdEnvValue -Name 'AZDO_WORKLOAD_IDENTITY_DISPLAY_NAME' -Value $workloadIdentityDisplayName
-
-$resourcesPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/resources?api-version=2021-04-01"
-$resourcesPayload = (Invoke-AzRestMethod -Method GET -Path $resourcesPath).Content | ConvertFrom-Json
-$resources = @($resourcesPayload.value)
-
-$storageResource = $resources | Where-Object { $_.type -eq 'Microsoft.Storage/storageAccounts' } | Select-Object -First 1
-if (-not $storageResource) {
-  throw "Storage account was not found in resource group '$ResourceGroupName'."
-}
-$webAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' } | Select-Object -First 1
 
 # ──────────────────────────────────────────────
 # Storage Blob Data Reader for signed-in user
@@ -1307,9 +1313,9 @@ if ($includeWebApp) {
 
   $encodedDisplayName = [System.Uri]::EscapeDataString("'$easyAuthDisplayName'")
   $existingAppResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq $encodedDisplayName"
+  $existingApp = Select-UniqueGraphApplication -Response $existingAppResponse -ExpectedValue $easyAuthDisplayName
   $desiredRedirectUris = @($redirectUri)
-  $aadApp = if ($existingAppResponse.value -and $existingAppResponse.value.Count -gt 0) {
-    $existingApp = $existingAppResponse.value[0]
+  $aadApp = if ($existingApp) {
 
     $existingRedirectUris = @()
     if ($existingApp.web -and $existingApp.web.redirectUris) {
@@ -1450,6 +1456,8 @@ $pipelineRepoPath = $pipelineRepoPath.TrimStart('/')
 
 $templateContent = Get-Content -Path $pipelineTemplatePath -Raw
 $runnerScriptContent = Get-Content -Path (Join-Path -Path $PSScriptRoot -ChildPath 'Invoke-MaesterAzureDevOpsRun.ps1') -Raw
+$moduleInstallerContent = Get-Content -Path (Join-Path -Path $PSScriptRoot -ChildPath 'Install-LockedModules.ps1') -Raw
+$moduleLockContent = Get-Content -Path (Join-Path -Path $projectRoot -ChildPath 'runtime-packages.lock.json') -Raw
 
 $replacementMap = @{
   '__SERVICE_CONNECTION__' = $AdoServiceConnectionName
@@ -1463,6 +1471,7 @@ $replacementMap = @{
   '__WEB_APP_NAME__' = $(if ($webAppResource) { $webAppResource.name } else { '' })
   '__WEB_APP_RESOURCE_GROUP__' = $(if ($webAppResource) { $ResourceGroupName } else { '' })
   '__TENANT_ID__' = $TenantId
+  '__SUBSCRIPTION_ID__' = $SubscriptionId
   '__CLIENT_ID__' = $aadApplication.AppId
   '__MAIL_RECIPIENT__' = $(if ($env:MAIL_RECIPIENT) { $env:MAIL_RECIPIENT } else { '' })
   '__FAIL_ON_TEST_FAILURES__' = $FailOnTestFailures.ToString().ToLower()
@@ -1481,6 +1490,14 @@ $pipelineFiles = @(
   [pscustomobject]@{
     Path = 'scripts/Invoke-MaesterAzureDevOpsRun.ps1'
     Content = $runnerScriptContent
+  },
+  [pscustomobject]@{
+    Path = 'scripts/Install-LockedModules.ps1'
+    Content = $moduleInstallerContent
+  },
+  [pscustomobject]@{
+    Path = 'runtime-packages.lock.json'
+    Content = $moduleLockContent
   }
 )
 
