@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0",
+  "solutionId": "azd-maester",
+  "status": "legacy",
+  "coverage": "partial",
+  "reviewedOn": "2026-10-02",
+  "requirements": [],
+  "gaps": [
+    "Azure RBAC scopes, operator/consent roles, cleanup, and optional connector permissions still need a full review.",
+    "Legacy umbrella and variant sources are retained; use the four standalone Maester solution manifests for current requirements."
+  ]
+}
