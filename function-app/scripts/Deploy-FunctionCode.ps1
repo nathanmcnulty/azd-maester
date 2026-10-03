@@ -147,9 +147,18 @@ if ($Plan -eq 'FC1') {
         $saveParams['RequiredVersion'] = '2.2.0'
       }
       Save-Module @saveParams
+      $modulePath = Join-Path -Path $modulesPath -ChildPath $moduleName
+      $manifest = if ($moduleName -eq 'Maester') {
+        Get-Item -LiteralPath (Join-Path $modulePath '2.2.0/Maester.psd1') -ErrorAction SilentlyContinue
+      } else {
+        Get-ChildItem -LiteralPath $modulePath -Recurse -File -Filter "$moduleName.psd1" -ErrorAction SilentlyContinue | Select-Object -First 1
+      }
+      if (-not $manifest) {
+        throw "Required module '$moduleName' was not saved with a module manifest."
+      }
       Write-Host "  Saved '$moduleName'." -ForegroundColor Green
     } catch {
-      Write-Warning "  Failed to save module '${moduleName}': $($_.Exception.Message)"
+      throw "Failed to bundle required module '${moduleName}': $($_.Exception.Message)"
     }
   }
 }
