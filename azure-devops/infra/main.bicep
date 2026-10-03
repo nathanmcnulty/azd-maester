@@ -204,6 +204,9 @@ resource storageDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (enab
 
 output storageAccountName string = storageAccount.name
 output webAppName string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output STORAGE_ACCOUNT_NAME string = storageAccount.name
+output WEB_APP_NAME string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output WEB_APP_ENABLED string = includeWebApp ? 'true' : 'false'
 output webAppDefaultHostName string = includeWebApp ? maesterWebApp!.outputs.webAppDefaultHostName : ''
 output azureRbacScopes string = azureRbacScopes
 output mailRecipient string = mailRecipient

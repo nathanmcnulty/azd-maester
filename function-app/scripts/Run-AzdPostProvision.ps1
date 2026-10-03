@@ -26,6 +26,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Resolve-DeploymentTarget.psm1') -Force
 
 function Get-EnvValue {
   param(
@@ -113,13 +114,13 @@ $exoAppRoleAssignmentIdsFromEnv = 'n/a'
 $teamsRoleAssignmentIdsFromEnv = 'n/a'
 $azureRoleAssignmentIdsFromEnv = 'n/a'
 $exoServicePrincipalDisplayNameFromEnv = 'n/a'
-$envValues = @{}
-try {
-  $envValues = (& azd env get-values --output json 2>$null | ConvertFrom-Json -AsHashtable)
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$envJson = & azd env get-values --output json -e $EnvironmentName --cwd $projectRoot 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($envJson | Out-String))) {
+  throw 'The selected azd environment could not be read after setup.'
 }
-catch {
-  $envValues = @{}
-}
+try { $envValues = $envJson | ConvertFrom-Json -AsHashtable }
+catch { throw 'The selected azd environment returned invalid values after setup.' }
 
 if ($envValues.Count -gt 0) {
   $easyAuthAppObjectIdValue = Get-EnvValue -Lines $envValues -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID'
@@ -218,6 +219,8 @@ if ($validateOnProvision -and $validateOnProvision.Trim().ToLower() -eq 'true') 
     ResourceGroupName = $ResourceGroupName
     TimeoutMinutes    = 5
   }
+  $testParams['FunctionAppName'] = Get-EnvValue -Lines $envValues -Name 'FUNCTION_APP_NAME'
+  $testParams['StorageAccountName'] = Get-EnvValue -Lines $envValues -Name 'STORAGE_ACCOUNT_NAME'
   if ($TenantId) {
     $testParams['TenantId'] = $TenantId
   }
@@ -270,11 +273,41 @@ $resourcesPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure
 $resources = @($resourcesPayload.value)
 $customDnsDocsUrl = 'https://learn.microsoft.com/azure/app-service/app-service-web-tutorial-custom-domain'
 
-$functionAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' -and $_.kind -like '*functionapp*' } | Select-Object -First 1
-$storageResource = $resources | Where-Object { $_.type -eq 'Microsoft.Storage/storageAccounts' } | Select-Object -First 1
-$hostingPlanResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/serverfarms' -and $_.name -like 'plan-*' } | Select-Object -First 1
-$webAppResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/sites' -and $_.kind -notlike '*functionapp*' } | Select-Object -First 1
-$webAppPlanResource = $resources | Where-Object { $_.type -eq 'Microsoft.Web/serverfarms' -and $_.name -like 'asp-*' } | Select-Object -First 1
+$functionAppResource = Select-ExactMaesterResource -Payload $resourcesPayload `
+  -Name (Get-EnvValue -Lines $envValues -Name 'FUNCTION_APP_NAME') -ProviderType 'Microsoft.Web/sites' `
+  -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName `
+  -EnvironmentName $EnvironmentName -SolutionName 'function-app' -Kind FunctionApp
+$storageResource = Select-ExactMaesterResource -Payload $resourcesPayload `
+  -Name (Get-EnvValue -Lines $envValues -Name 'STORAGE_ACCOUNT_NAME') -ProviderType 'Microsoft.Storage/storageAccounts' `
+  -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName `
+  -EnvironmentName $EnvironmentName -SolutionName 'function-app'
+$functionAppDetails = Invoke-RestMethod -Method GET `
+  -Uri "https://management.azure.com$($functionAppResource.id)?api-version=2023-12-01" -Headers $armHeaders
+$functionAppDetails = Select-ExactMaesterResource -Payload ([pscustomobject]@{ value = @($functionAppDetails) }) `
+  -Name $functionAppResource.name -ProviderType 'Microsoft.Web/sites' `
+  -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName `
+  -EnvironmentName $EnvironmentName -SolutionName 'function-app' -Kind FunctionApp
+$hostingPlanResource = Select-MaesterLinkedPlan -Payload $resourcesPayload -Site $functionAppDetails `
+  -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -EnvironmentName $EnvironmentName
+$webAppResource = $null
+$webAppPlanResource = $null
+$webAppNameFromDeployment = Get-EnvValue -Lines $envValues -Name 'WEB_APP_NAME'
+$webAppEnabledFromDeployment = Get-EnvValue -Lines $envValues -Name 'WEB_APP_ENABLED'
+if ($webAppEnabledFromDeployment -notin @('true', 'false')) { throw 'WEB_APP_ENABLED must be supplied by the deployment output.' }
+if ($webAppEnabledFromDeployment -eq 'true') {
+  $webAppResource = Select-ExactMaesterResource -Payload $resourcesPayload `
+    -Name $webAppNameFromDeployment -ProviderType 'Microsoft.Web/sites' `
+    -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName `
+    -EnvironmentName $EnvironmentName -SolutionName 'function-app' -Kind WebApp
+  $webAppDetails = Invoke-RestMethod -Method GET `
+    -Uri "https://management.azure.com$($webAppResource.id)?api-version=2023-12-01" -Headers $armHeaders
+  $webAppDetails = Select-ExactMaesterResource -Payload ([pscustomobject]@{ value = @($webAppDetails) }) `
+    -Name $webAppResource.name -ProviderType 'Microsoft.Web/sites' `
+    -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName `
+    -EnvironmentName $EnvironmentName -SolutionName 'function-app' -Kind WebApp
+  $webAppPlanResource = Select-MaesterLinkedPlan -Payload $resourcesPayload -Site $webAppDetails `
+    -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -EnvironmentName $EnvironmentName
+}
 $includeWebAppEffective = [bool]$webAppResource
 $deploymentModeEffective = if ($includeWebAppEffective) { 'webapp' } else { 'quick' }
 
@@ -337,7 +370,7 @@ $summaryLines += "- Web App: $(if ($webAppResource) { $webAppResource.name } els
 $summaryLines += ""
 $summaryLines += '## How Components Interoperate'
 $summaryLines += '- Function App executes Maester tests on a weekly timer schedule (Sunday 9am UTC) and on-demand via admin trigger.'
-$summaryLines += '- Managed dependencies (requirements.psd1) handle module installation automatically on cold start.'
+$summaryLines += '- Exact SHA-256 verified PowerShell modules are bundled in the Function App deployment package.'
 $summaryLines += '- Function App managed identity calls Microsoft Graph using the configured permission profile.'
 $summaryLines += '- Function App managed identity uploads gzip-compressed dated reports to storage container `archive` and `latest.html` to `latest`.'
 if ($webAppResource) {

@@ -42,6 +42,18 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
 
 Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Resolve-DeploymentTarget.psm1') -Force
+
+function Set-AzdEnvValue {
+  param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][AllowEmptyString()][string]$Value)
+  Set-MaesterAzdValue -EnvironmentName $EnvironmentName -ProjectRoot $projectRoot -Name $Name -Value $Value
+}
+
+function Set-AzdEnvJsonArray {
+  param([Parameter(Mandatory)][string]$Name, [AllowEmptyCollection()][string[]]$Values = @())
+  $serialized = (@($Values) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique) -join ';'
+  Set-AzdEnvValue -Name $Name -Value $serialized
+}
 
 
 # ──────────────────────────────────────────────
@@ -131,6 +143,8 @@ if (-not $PSBoundParameters.ContainsKey('SecurityGroupObjectId') -and -not $PSBo
 }
 
 $resolvedResourceGroupName = if ($ResourceGroupName) { $ResourceGroupName } elseif ($env:AZURE_RESOURCE_GROUP) { $env:AZURE_RESOURCE_GROUP } else { "rg-$EnvironmentName" }
+$deploymentValues = Assert-MaesterAzdTarget -EnvironmentName $EnvironmentName -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $resolvedResourceGroupName -ProjectRoot $projectRoot
 
 # ──────────────────────────────────────────────
 # Discover storage account
@@ -142,13 +156,47 @@ if (-not $storagePayload.value -or $storagePayload.value.Count -eq 0) {
   throw "No Storage Account resources were found in resource group '$resolvedResourceGroupName'."
 }
 
-$preferredStorageAccountName = "stmaester$($EnvironmentName.ToLower())"
-$storageAccount = @($storagePayload.value | Where-Object { $_.name -eq $preferredStorageAccountName }) | Select-Object -First 1
-if (-not $storageAccount) {
-  $storageAccount = @($storagePayload.value | Where-Object { $_.name -like 'stmaester*' }) | Select-Object -First 1
+$storageAccount = Select-ExactMaesterResource -Payload $storagePayload -Name ([string]$deploymentValues['STORAGE_ACCOUNT_NAME']) `
+  -ProviderType 'Microsoft.Storage/storageAccounts' -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $resolvedResourceGroupName -EnvironmentName $EnvironmentName -SolutionName 'container-app-job'
+
+if ([string]$deploymentValues['WEB_APP_ENABLED'] -notin @('true', 'false')) { throw 'WEB_APP_ENABLED must be supplied by the deployment output.' }
+$webApp = $null
+if ([string]$deploymentValues['WEB_APP_ENABLED'] -eq 'true') {
+  $webAppsQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Web/sites?api-version=2023-12-01"
+  $webAppsPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$webAppsQuery" -Headers $armHeaders
+  $webApp = Select-ExactMaesterResource -Payload $webAppsPayload -Name ([string]$deploymentValues['WEB_APP_NAME']) `
+    -ProviderType 'Microsoft.Web/sites' -SubscriptionId $SubscriptionId `
+    -ResourceGroupName $resolvedResourceGroupName -EnvironmentName $EnvironmentName `
+    -SolutionName 'container-app-job' -Kind WebApp
 }
-if (-not $storageAccount) {
-  $storageAccount = $storagePayload.value[0]
+
+# ──────────────────────────────────────────────
+# Discover Container App Job and get managed identity principal
+# ──────────────────────────────────────────────
+
+$jobsQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.App/jobs?api-version=2024-03-01"
+$jobsPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$jobsQuery" -Headers $armHeaders
+if (-not $jobsPayload.value -or $jobsPayload.value.Count -eq 0) {
+  throw "No Container App Job resources were found in resource group '$resolvedResourceGroupName'."
+}
+
+$preferredJobName = [string]$deploymentValues['containerAppJobName']
+$containerAppJob = Select-ExactMaesterResource -Payload $jobsPayload -Name $preferredJobName `
+  -ProviderType 'Microsoft.App/jobs' -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $resolvedResourceGroupName -EnvironmentName $EnvironmentName -SolutionName 'container-app-job'
+
+$containerAppJobName = $containerAppJob.name
+$principalId = & (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Get-ManagedIdentityPrincipal.ps1') `
+  -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $resolvedResourceGroupName `
+  -ProviderNamespace 'Microsoft.App' `
+  -ResourceType 'jobs' `
+  -ResourceName $containerAppJobName `
+  -ApiVersion '2024-03-01'
+if ([string]::IsNullOrWhiteSpace([string]$deploymentValues['containerAppJobPrincipalId']) -or
+    $principalId -ine [string]$deploymentValues['containerAppJobPrincipalId']) {
+  throw 'Container App Job managed identity differs from the deployment output.'
 }
 
 # ──────────────────────────────────────────────
@@ -195,33 +243,7 @@ else {
   Write-Warning 'Signed-in user object id was not available. Storage Blob Data Reader assignment for user was skipped.'
 }
 
-# ──────────────────────────────────────────────
-# Discover Container App Job and get managed identity principal
-# ──────────────────────────────────────────────
-
-$jobsQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.App/jobs?api-version=2024-03-01"
-$jobsPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$jobsQuery" -Headers $armHeaders
-if (-not $jobsPayload.value -or $jobsPayload.value.Count -eq 0) {
-  throw "No Container App Job resources were found in resource group '$resolvedResourceGroupName'."
-}
-
-$preferredJobName = "caj-maester-$($EnvironmentName.ToLower())"
-$containerAppJob = @($jobsPayload.value | Where-Object { $_.name -eq $preferredJobName }) | Select-Object -First 1
-if (-not $containerAppJob) {
-  $foundNames = @($jobsPayload.value | ForEach-Object { $_.name } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-  $foundList = if ($foundNames.Count -gt 0) { $foundNames -join ', ' } else { 'none' }
-  throw "Expected Container App Job '$preferredJobName' was not found in resource group '$resolvedResourceGroupName'. Found: $foundList. This usually indicates provisioning failed, and setup cannot continue."
-}
-
-$containerAppJobName = $containerAppJob.name
-
-$principalId = & (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Get-ManagedIdentityPrincipal.ps1') `
-  -SubscriptionId $SubscriptionId `
-  -ResourceGroupName $resolvedResourceGroupName `
-  -ProviderNamespace 'Microsoft.App' `
-  -ResourceType 'jobs' `
-  -ResourceName $containerAppJobName `
-  -ApiVersion '2024-03-01'
+Set-AzdEnvValue -Name 'CONTAINER_JOB_NAME' -Value $containerAppJobName
 
 Set-AzdEnvValue -Name 'CONTAINER_JOB_MI_PRINCIPAL_ID' -Value $principalId
 
@@ -441,50 +463,47 @@ if ($exoServicePrincipalDisplayName) {
 # Upload runner script to Azure Files share
 # ──────────────────────────────────────────────
 
-$runnerScriptPath = Join-Path -Path $PSScriptRoot -ChildPath 'Invoke-MaesterContainerJob.ps1'
-if (-not (Test-Path -Path $runnerScriptPath)) {
-  throw "Runner script was not found: $runnerScriptPath"
-}
-
 $storageAccountName = $storageAccount.name
 $storageKeyPath = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/listKeys?api-version=2023-05-01"
 $storageKeysResponse = Invoke-RestMethod -Method POST -Uri "https://management.azure.com$storageKeyPath" -Headers $armHeaders -Body '{}' -ContentType 'application/json'
 $storageKey = $storageKeysResponse.keys[0].value
 
-& az storage file upload `
-  --account-name $storageAccountName `
-  --account-key $storageKey `
-  --share-name 'scripts' `
-  --source $runnerScriptPath `
-  --path 'Invoke-MaesterContainerJob.ps1' `
-  --no-progress `
-  --output none
-if ($LASTEXITCODE -ne 0) {
-  throw "Failed to upload runner script to Azure Files share 'scripts'."
+foreach ($file in @('Invoke-MaesterContainerJob.ps1', 'Install-LockedModules.ps1', 'runtime-packages.lock.json')) {
+  $sourcePath = if ($file -like '*.json') { Join-Path (Split-Path $PSScriptRoot -Parent) $file } else { Join-Path $PSScriptRoot $file }
+  if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw "Required runner file was not found: $sourcePath" }
+  & az storage file upload `
+    --account-name $storageAccountName `
+    --account-key $storageKey `
+    --share-name 'scripts' `
+    --source $sourcePath `
+    --path $file `
+    --no-progress `
+    --output none
+  if ($LASTEXITCODE -ne 0) { throw "Failed to upload '$file' to Azure Files share 'scripts'." }
 }
 
-Write-Host "Uploaded runner script to Azure Files share 'scripts/$storageAccountName'."
+Write-Host "Uploaded locked runner files to Azure Files share 'scripts/$storageAccountName'."
 
 # ──────────────────────────────────────────────
 # Optional: Build and push ACR image
 # ──────────────────────────────────────────────
 
-$includeACR = ConvertTo-BoolOrDefault -Value $env:INCLUDE_ACR -Default $false
+$acrName = [string]$deploymentValues['acrName']
+$includeACR = -not [string]::IsNullOrWhiteSpace($acrName)
 if ($includeACR) {
   & "$PSScriptRoot\Build-MaesterImage.ps1" `
     -SubscriptionId $SubscriptionId `
     -ResourceGroupName $resolvedResourceGroupName `
-    -EnvironmentName $EnvironmentName
+    -EnvironmentName $EnvironmentName `
+    -ContainerAppJobName $containerAppJobName `
+    -AcrName $acrName
 }
 
 # ──────────────────────────────────────────────
 # Easy Auth on optional Web App
 # ──────────────────────────────────────────────
 
-$webAppsQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Web/sites?api-version=2023-12-01"
-$webAppsPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$webAppsQuery" -Headers $armHeaders
-
-if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
+if ($webApp) {
   if (-not $SecurityGroupObjectId -and -not [string]::IsNullOrWhiteSpace($SecurityGroupDisplayName)) {
     Connect-MgGraphSilent -TenantId $TenantId -Scopes 'Group.Read.All','Directory.Read.All'
 
@@ -559,12 +578,6 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
 
   Connect-MgGraphSilent -TenantId $TenantId -Scopes 'Application.ReadWrite.All','Directory.Read.All','DelegatedPermissionGrant.ReadWrite.All'
 
-  $preferredWebAppName = "app-maester-$($EnvironmentName.ToLower())"
-  $webApp = @($webAppsPayload.value | Where-Object { $_.name -eq $preferredWebAppName }) | Select-Object -First 1
-  if (-not $webApp) {
-    $webApp = $webAppsPayload.value[0]
-  }
-
   $webAppName = $webApp.name
   $webAppHostName = $webApp.properties.defaultHostName
   $redirectUri = "https://$webAppHostName/.auth/login/aad/callback"
@@ -572,9 +585,9 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
 
   $encodedDisplayName = [System.Uri]::EscapeDataString("'$easyAuthDisplayName'")
   $existingAppResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq $encodedDisplayName"
+  $existingApp = Select-UniqueGraphApplication -Response $existingAppResponse -ExpectedValue $easyAuthDisplayName
   $desiredRedirectUris = @($redirectUri)
-  $aadApp = if ($existingAppResponse.value -and $existingAppResponse.value.Count -gt 0) {
-    $existingApp = $existingAppResponse.value[0]
+  $aadApp = if ($existingApp) {
 
     $existingRedirectUris = @()
     if ($existingApp.web -and $existingApp.web.redirectUris) {
@@ -613,20 +626,9 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
   }
 
   Write-Host "Persisting Easy Auth Entra app identifiers to azd environment variables..."
-  & azd env set EASY_AUTH_ENTRA_APP_OBJECT_ID $aadApp.id
-  if ($LASTEXITCODE -ne 0) {
-    Write-Warning 'Failed to persist EASY_AUTH_ENTRA_APP_OBJECT_ID to azd environment.'
-  }
-
-  & azd env set EASY_AUTH_ENTRA_APP_CLIENT_ID $aadApp.appId
-  if ($LASTEXITCODE -ne 0) {
-    Write-Warning 'Failed to persist EASY_AUTH_ENTRA_APP_CLIENT_ID to azd environment.'
-  }
-
-  & azd env set EASY_AUTH_ENTRA_APP_DISPLAY_NAME $aadApp.displayName
-  if ($LASTEXITCODE -ne 0) {
-    Write-Warning 'Failed to persist EASY_AUTH_ENTRA_APP_DISPLAY_NAME to azd environment.'
-  }
+  Set-AzdEnvValue -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID' -Value $aadApp.id
+  Set-AzdEnvValue -Name 'EASY_AUTH_ENTRA_APP_CLIENT_ID' -Value $aadApp.appId
+  Set-AzdEnvValue -Name 'EASY_AUTH_ENTRA_APP_DISPLAY_NAME' -Value $aadApp.displayName
 
   $servicePrincipalResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$($aadApp.appId)'"
   $easyAuthServicePrincipal = $null

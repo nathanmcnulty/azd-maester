@@ -1,4 +1,4 @@
-﻿# Automation Account azd solution
+# Automation Account azd solution
 
 Deploys a production-style Maester automation solution on Azure with:
 
@@ -87,10 +87,22 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 ## Script map
 
 - azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
+- Direct preprovision, setup, and postprovision runs require selecting the target with `azd env select <env>` and passing `-EnvironmentName <env>`; the hook verifies that selection and its Azure scope before changes.
 - Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-RunbookValidation.ps1`, `scripts/Maester-DeploymentEvidence.psm1`
 - Validation prints actionable `Output`, `Warning`, and `Error` records, summarizes omitted progress/debug noise, and labels completed jobs with error records as lifecycle success that still requires Maester report review.
 - The deployment validation report records runbook completion and report generation as a lifecycle check. Maester test outcomes remain in the generated report and are not converted into an all-tests-passed deployment claim.
 - Automation runbook payload script (published into Automation): `scripts/Invoke-MaesterAutomationRunbook.ps1`
+- Runtime module versions and package hashes: [runtime package pins](docs/runtime-package-pins.md). The published runbook verifies package bytes itself because Automation does not enforce ARM `contentHash`. The weekly schedule is attached only after local runbook publication is confirmed.
+
+Preprovision preserves existing Automation jobSchedules and resource locks. It
+reuses a schedule ID only when `AUTOMATION_OWNED_ACCOUNT_ID`,
+`AUTOMATION_OWNED_PRINCIPAL_ID`, and `AUTOMATION_OWNED_JOB_SCHEDULE_ID` in the
+selected azd environment match the live account and association. An existing
+account without that receipt requires explicit, verified
+`AUTOMATION_ADOPT_ACCOUNT_ID`, `AUTOMATION_ADOPT_PRINCIPAL_ID`, and, when a
+template association exists, `AUTOMATION_ADOPT_JOB_SCHEDULE_ID`. Partial or
+ambiguous bindings stop redeployment. Postprovision records ownership only
+after verifying the published local runbook and exact live association.
 
 ## Runtime behavior
 

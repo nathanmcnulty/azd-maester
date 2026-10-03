@@ -1,0 +1,11 @@
+{
+  "bindings": [
+    {
+      "name": "ValidationRequest",
+      "type": "queueTrigger",
+      "direction": "in",
+      "queueName": "maester-validation",
+      "connection": "AzureWebJobsStorage"
+    }
+  ]
+}

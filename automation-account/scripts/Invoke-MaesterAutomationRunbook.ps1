@@ -21,6 +21,65 @@
 $ErrorActionPreference = 'Stop'
 $ConfirmPreference = 'None'
 
+# Azure Automation currently accepts a package contentLink with an incorrect
+# contentHash. Verify the bytes again in the runbook before importing modules.
+$runtimePackages = @{
+  'Az.Accounts' = @{ Version = '5.5.3'; Sha256 = '5A8BE006E80A7CA66134DF1F28E0EAD93EF4BC437685B647B6720583CB58E615' }
+  'Maester' = @{ Version = '2.2.0'; Sha256 = '8C8A9757771177BD89785262E6B38385CF5E5C19BB799E4399E77F6439AD699C' }
+  'Pester' = @{ Version = '6.2.0'; Sha256 = 'E6AC7418D4F12500269AACA58AE56CF1CAAFBBF1AFA2CEC334E289D1CF50A239' }
+  'NuGet' = @{ Version = '1.3.3'; Sha256 = 'FCF1A37925C235159AB1C23249F016E65456EA3A36D0EA42DB85F4F15BF7C033' }
+  'PackageManagement' = @{ Version = '1.4.8.1'; Sha256 = '7E1F8A75B6BC8A83D8ABFF79F6690FC1DFBD534FD3E5733D97E19BCB5954C13E' }
+  'PowerShellGet' = @{ Version = '2.2.5'; Sha256 = '6B8CEBF2A464EAEB31B0A6D627355C30D9D1899DBA0CE3BDD0D4E7AFCA148673' }
+  'Microsoft.Graph.Authentication' = @{ Version = '2.41.0'; Sha256 = '42E8B7A8BBA6AFD1910510D8108C1871EE5D12C5A4818CC4C36CA406369A7AFD' }
+  'ExchangeOnlineManagement' = @{ Version = '3.10.1'; Sha256 = '545FB0FDF65B96ABED37F4F5B5D7DB661276DDC7DE48A742BB6E7199AB9414A3' }
+  'MicrosoftTeams' = @{ Version = '8.0.0'; Sha256 = '6AA426D37913DEE78628AD36DFC26E40161702018479F110F396712E896F2882' }
+}
+
+function Import-LockedRuntimeModule {
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [Parameter(Mandatory)][hashtable]$PackageLock,
+    [Parameter(Mandatory)][string]$DestinationRoot,
+    [string]$PackageDirectory
+  )
+
+  if (-not $PackageLock.ContainsKey($Name)) { throw "Runtime package '$Name' is not locked." }
+  $version = [string]$PackageLock[$Name].Version
+  $expectedHash = [string]$PackageLock[$Name].Sha256
+  if ($Name -notmatch '^[A-Za-z][A-Za-z0-9.-]*$' -or $version -notmatch '^\d+(\.\d+){1,3}$' -or
+      $expectedHash -notmatch '^[A-Fa-f0-9]{64}$') { throw "Invalid runtime package lock for '$Name'." }
+
+  $packagePath = if ($PackageDirectory) { Join-Path $PackageDirectory "$Name.$version.nupkg" }
+    else { Join-Path $DestinationRoot "$Name.$version.nupkg" }
+  if (-not $PackageDirectory) {
+    Invoke-WebRequest -Uri "https://www.powershellgallery.com/api/v2/package/$Name/$version" -OutFile $packagePath -ErrorAction Stop
+  }
+  if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) { throw "Locked runtime package '$Name/$version' is missing." }
+  if ((Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash -ne $expectedHash) {
+    throw "Locked runtime package '$Name/$version' failed SHA-256 verification."
+  }
+
+  $target = Join-Path (Join-Path $DestinationRoot $Name) $version
+  New-Item -ItemType Directory -Path $target -Force | Out-Null
+  try {
+    [IO.Compression.ZipFile]::ExtractToDirectory($packagePath, $target)
+    $manifest = Join-Path $target "$Name.psd1"
+    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Locked runtime package '$Name/$version' has no manifest." }
+    $imported = Import-Module -Name $manifest -Force -PassThru -ErrorAction Stop |
+      Where-Object { $_.Name -eq $Name -and $_.ModuleBase -eq $target -and $_.Version -eq [version]$version }
+    if (-not $imported) { throw "Locked runtime package '$Name/$version' was not imported from its verified path." }
+  }
+  catch {
+    Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+    throw
+  }
+  if (-not $PackageDirectory) { Remove-Item -LiteralPath $packagePath -Force }
+}
+
+$verifiedModuleRoot = Join-Path ([IO.Path]::GetTempPath()) "maester-verified-$([guid]::NewGuid().ToString('N'))"
+New-Item -ItemType Directory -Path $verifiedModuleRoot -Force | Out-Null
+$env:PSModulePath = "$verifiedModuleRoot$([IO.Path]::PathSeparator)$env:PSModulePath"
+
 function ConvertTo-BoolOrDefault {
   param(
     [Parameter(Mandatory = $false)]
@@ -125,10 +184,9 @@ function Publish-WebAppContent {
 
 Write-Output "Starting Maester automation runbook at $(Get-Date -Format 'u')"
 
-Import-Module Az.Accounts -Force
-Import-Module Microsoft.Graph.Authentication -Force
-Import-Module Maester -RequiredVersion '2.2.0' -Force
-Import-Module Pester -Force
+foreach ($name in @('NuGet', 'PackageManagement', 'PowerShellGet', 'Az.Accounts', 'Microsoft.Graph.Authentication', 'Pester', 'Maester')) {
+  Import-LockedRuntimeModule -Name $name -PackageLock $runtimePackages -DestinationRoot $verifiedModuleRoot
+}
 
 Connect-AzAccount -Identity | Out-Null
 Connect-MgGraph -Identity -NoWelcome | Out-Null
@@ -168,8 +226,8 @@ catch {
 $moera = $null
 if ($includeExchange) {
   Write-Output 'IncludeExchange enabled. Attempting Exchange Online connection using managed identity.'
+  Import-LockedRuntimeModule -Name 'ExchangeOnlineManagement' -PackageLock $runtimePackages -DestinationRoot $verifiedModuleRoot
   try {
-    Import-Module ExchangeOnlineManagement -Force
 
     # Resolve tenant initial domain (MOERA) for Organization parameter
     try {
@@ -246,6 +304,7 @@ if ($includeExchange) {
 }
 
 if ($includeTeams) {
+  Import-LockedRuntimeModule -Name 'MicrosoftTeams' -PackageLock $runtimePackages -DestinationRoot $verifiedModuleRoot
   Write-Output 'IncludeTeams enabled. Attempting Microsoft Teams connection using managed identity.'
 
   # Retry Teams connection with backoff to handle Entra directory role replication delays.
@@ -253,7 +312,6 @@ if ($includeTeams) {
   $teamsRetryDelay = 30
   for ($teamsAttempt = 1; $teamsAttempt -le $teamsMaxAttempts; $teamsAttempt++) {
     try {
-      Import-Module MicrosoftTeams -Force
       try {
         Connect-MicrosoftTeams -Identity | Out-Null
       }
@@ -333,8 +391,8 @@ if (-not $MailRecipient) {
 $tempRoot = Join-Path -Path $env:TEMP -ChildPath ("maester-{0}-{1}" -f (Get-Date -Format 'yyyyMMddHHmmss'), [guid]::NewGuid().ToString('N'))
 New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
 
-$maesterModule = Get-Module -Name Maester -ListAvailable |
-  Where-Object { $_.Version -eq [version]'2.2.0' } |
+$maesterModule = Get-Module -Name Maester |
+  Where-Object { $_.Version -eq [version]'2.2.0' -and $_.Path.StartsWith($verifiedModuleRoot, [StringComparison]::OrdinalIgnoreCase) } |
   Select-Object -First 1
 if (-not $maesterModule) {
   throw 'Maester module version 2.2.0 was not found after import.'

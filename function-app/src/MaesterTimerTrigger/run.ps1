@@ -2,7 +2,7 @@
 # Timer-triggered Azure Function that runs Maester assessments.
 # Reads configuration from Function App application settings (environment variables).
 
-param($Timer)
+param($Timer, $TriggerMetadata, [string]$ValidationId)
 
 $ErrorActionPreference = 'Continue'
 $ConfirmPreference = 'None'
@@ -71,6 +71,28 @@ function Set-BlobContent {
   Invoke-RestMethod -Method Put -Uri $uri -Headers $headers -InFile $SourcePath -ContentType $ContentType -ErrorAction Stop | Out-Null
 }
 
+function Write-ValidationReceipt {
+  param([Parameter(Mandatory)][ValidateSet('Succeeded', 'Failed')][string]$Status)
+  if (-not $ValidationId) { return }
+  if ([string]::IsNullOrWhiteSpace($StorageAccountName)) {
+    throw 'Validation receipt cannot be written without STORAGE_ACCOUNT_NAME.'
+  }
+  $receiptPath = [IO.Path]::GetTempFileName()
+  try {
+    [pscustomobject]@{
+      schemaVersion = 1
+      validationId = $ValidationId
+      invocationId = $validationInvocationId
+      status = $Status
+      completedAt = (Get-Date).ToUniversalTime().ToString('o')
+    } | ConvertTo-Json -Compress | Set-Content -LiteralPath $receiptPath -Encoding utf8
+    $token = Get-PlainToken -ResourceUrl 'https://storage.azure.com/'
+    Set-BlobContent -AccountName $StorageAccountName -Container 'validation' -BlobName "$ValidationId.json" `
+      -SourcePath $receiptPath -StorageToken $token -ContentType 'application/json' -AccessTier 'Hot'
+  }
+  finally { Remove-Item -LiteralPath $receiptPath -Force -ErrorAction SilentlyContinue }
+}
+
 function Compress-GzipFile {
   param(
     [Parameter(Mandatory = $true)][string]$InputPath,
@@ -117,33 +139,17 @@ function Publish-WebAppContent {
   Write-Output "Published latest report to Web App '$AppName' as index.html"
 }
 
-function Test-ModuleInstalled {
-  param(
-    [Parameter(Mandatory = $true)][string]$ModuleName,
-    [Parameter(Mandatory = $false)][string]$MaxMajorVersion
-  )
-
-  # Managed dependencies (requirements.psd1) should already provide these modules.
-  # This check is a runtime fallback only – Install-Module downloads to ephemeral
-  # local disk and is lost on Consumption-plan cold starts, so it should not be the
-  # primary installation mechanism.
-  if (Get-Module -ListAvailable -Name $ModuleName -ErrorAction SilentlyContinue) {
-    return
+function Import-LockedModule {
+  param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Version)
+  $moduleRoot = Join-Path (Split-Path $PSScriptRoot -Parent) 'Modules'
+  $manifest = Join-Path (Join-Path (Join-Path $moduleRoot $Name) $Version) "$Name.psd1"
+  if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+    throw "Required locked module '$Name/$Version' is missing from the function package."
   }
-
-  Write-Warning "Module '$ModuleName' was not found via managed dependencies. Attempting runtime Install-Module as fallback (this may consume significant execution time)."
-  $installArgs = @{
-    Name            = $ModuleName
-    Force           = $true
-    Scope           = 'CurrentUser'
-    Repository      = 'PSGallery'
-    AllowClobber    = $true
-    ErrorAction     = 'Stop'
-  }
-  if (-not [string]::IsNullOrWhiteSpace($MaxMajorVersion)) {
-    $installArgs['MaximumVersion'] = "$MaxMajorVersion.999.999"
-  }
-  Install-Module @installArgs
+  $loaded = Import-Module -Name $manifest -Force -PassThru -ErrorAction Stop |
+    Where-Object { $_.Name -eq $Name -and $_.Version -eq [version]$Version } |
+    Select-Object -First 1
+  if (-not $loaded) { throw "Required locked module '$Name/$Version' did not import at its locked version." }
 }
 
 # ──────────────────────────────────────────────
@@ -152,13 +158,24 @@ function Test-ModuleInstalled {
 
 Write-Step "Starting Maester function trigger"
 
+$validationInvocationId = $null
+if ($ValidationId) {
+  $requestGuid = [guid]::Empty
+  $invocationGuid = [guid]::Empty
+  if (-not [guid]::TryParse($ValidationId, [ref]$requestGuid) -or $requestGuid -eq [guid]::Empty -or
+      -not $TriggerMetadata -or $TriggerMetadata.sys.MethodName -ne 'MaesterValidationTrigger' -or
+      -not [guid]::TryParse([string]$TriggerMetadata.sys.RandGuid, [ref]$invocationGuid) -or $invocationGuid -eq [guid]::Empty) {
+    throw 'Validation invocation metadata is missing or invalid.'
+  }
+  $ValidationId = $requestGuid.ToString('D')
+  $validationInvocationId = $invocationGuid.ToString('D')
+}
+
 if ($Timer.IsPastDue) {
   Write-Step 'Timer trigger is past due. Running immediately.'
 }
 
 try {
-
-Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
 
 $StorageAccountName = $env:STORAGE_ACCOUNT_NAME
 $includeExchange = ConvertTo-BoolOrDefault -Value $env:INCLUDE_EXCHANGE -Default $false
@@ -172,29 +189,22 @@ $DashboardContainer = 'latest'
 
 Write-Step "Config: Exchange=$includeExchange, Teams=$includeTeams, Azure=$includeAzure, Storage=$StorageAccountName"
 
-# Install optional modules not handled by managed dependencies
-$optionalModules = @()
-if ($includeExchange) {
-  $optionalModules += @{ Name = 'ExchangeOnlineManagement'; MaxMajor = '3' }
-}
-if ($includeTeams) {
-  $optionalModules += @{ Name = 'MicrosoftTeams'; MaxMajor = '6' }
-}
-
-foreach ($mod in $optionalModules) {
-  Write-Step "Checking module: $($mod.Name)"
-  Test-ModuleInstalled -ModuleName $mod.Name -MaxMajorVersion $mod.MaxMajor
-}
-
 # ──────────────────────────────────────────────
 # Authenticate and connect
 # ──────────────────────────────────────────────
 
 Write-Step 'Importing core modules'
-Import-Module Az.Accounts -Force -ErrorAction Stop
-Import-Module Microsoft.Graph.Authentication -Force -ErrorAction Stop
-Import-Module Maester -RequiredVersion '2.2.0' -Force -ErrorAction Stop
-Import-Module Pester -Force -ErrorAction Stop
+Import-LockedModule -Name 'Az.Accounts' -Version '5.5.3'
+Import-LockedModule -Name 'Microsoft.Graph.Authentication' -Version '2.41.0'
+Import-LockedModule -Name 'Maester' -Version '2.2.0'
+Import-LockedModule -Name 'Pester' -Version '6.2.0'
+Import-LockedModule -Name 'DnsClient-PS' -Version '1.2.1'
+if ($includeExchange) {
+  Import-LockedModule -Name 'PackageManagement' -Version '1.4.8.1'
+  Import-LockedModule -Name 'PowerShellGet' -Version '2.2.5'
+  Import-LockedModule -Name 'ExchangeOnlineManagement' -Version '3.10.1'
+}
+if ($includeTeams) { Import-LockedModule -Name 'MicrosoftTeams' -Version '8.0.0' }
 Write-Step 'Core modules imported'
 
 # Ensure context autosave is disabled (profile.ps1 should do this, but guard against
@@ -229,7 +239,6 @@ $moera = $null
 if ($includeExchange) {
   Write-Step 'IncludeExchange enabled. Attempting Exchange Online connection using managed identity.'
   try {
-    Import-Module ExchangeOnlineManagement -Force
 
     # Resolve tenant initial domain (MOERA) for Organization parameter
     try {
@@ -319,7 +328,6 @@ if ($includeTeams) {
   for ($teamsAttempt = 1; $teamsAttempt -le $teamsMaxAttempts; $teamsAttempt++) {
     try {
       Write-Step "Teams connection attempt $teamsAttempt/$teamsMaxAttempts"
-      Import-Module MicrosoftTeams -Force
       try {
         Connect-MicrosoftTeams -Identity | Out-Null
       }
@@ -485,10 +493,16 @@ elseif (-not [string]::IsNullOrWhiteSpace($WebAppName)) {
 }
 
 Write-Step "Function trigger completed successfully"
+Write-ValidationReceipt -Status 'Succeeded'
 
 }
 catch {
-  Write-Step "FATAL ERROR: $($_.Exception.Message)"
-  Write-Step "Error details: $($_.ScriptStackTrace)"
-  throw
+  $runError = $_
+  if ($ValidationId) {
+    try { Write-ValidationReceipt -Status 'Failed' }
+    catch { Write-Warning "Could not write failed validation receipt: $($_.Exception.Message)" }
+  }
+  Write-Step "FATAL ERROR: $($runError.Exception.Message)"
+  Write-Step "Error details: $($runError.ScriptStackTrace)"
+  throw $runError
 }

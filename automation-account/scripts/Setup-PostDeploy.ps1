@@ -42,6 +42,20 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $projectRoot
 
 Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-SetupHelpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Resolve-DeploymentTarget.psm1') -Force
+. (Join-Path $PSScriptRoot 'JobScheduleOwnership.ps1')
+Import-Module (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Maester-Helpers.psm1') -Force
+
+function Set-AzdEnvValue {
+  param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][AllowEmptyString()][string]$Value)
+  Set-MaesterAzdValue -EnvironmentName $EnvironmentName -ProjectRoot $projectRoot -Name $Name -Value $Value
+}
+
+function Set-AzdEnvJsonArray {
+  param([Parameter(Mandatory)][string]$Name, [AllowEmptyCollection()][string[]]$Values = @())
+  $serialized = (@($Values) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique) -join ';'
+  Set-AzdEnvValue -Name $Name -Value $serialized
+}
 
 
 # ──────────────────────────────────────────────
@@ -131,6 +145,8 @@ if (-not $PSBoundParameters.ContainsKey('SecurityGroupObjectId') -and -not $PSBo
 }
 
 $resolvedResourceGroupName = if ($ResourceGroupName) { $ResourceGroupName } elseif ($env:AZURE_RESOURCE_GROUP) { $env:AZURE_RESOURCE_GROUP } else { "rg-$EnvironmentName" }
+$deploymentValues = Assert-MaesterAzdTarget -EnvironmentName $EnvironmentName -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $resolvedResourceGroupName -ProjectRoot $projectRoot
 
 # ──────────────────────────────────────────────
 # Discover storage account
@@ -142,13 +158,47 @@ if (-not $storagePayload.value -or $storagePayload.value.Count -eq 0) {
   throw "No Storage Account resources were found in resource group '$resolvedResourceGroupName'."
 }
 
-$preferredStorageAccountName = "stmaester$($EnvironmentName.ToLower())"
-$storageAccount = @($storagePayload.value | Where-Object { $_.name -eq $preferredStorageAccountName }) | Select-Object -First 1
-if (-not $storageAccount) {
-  $storageAccount = @($storagePayload.value | Where-Object { $_.name -like 'stmaester*' }) | Select-Object -First 1
+$storageAccount = Select-ExactMaesterResource -Payload $storagePayload -Name ([string]$deploymentValues['STORAGE_ACCOUNT_NAME']) `
+  -ProviderType 'Microsoft.Storage/storageAccounts' -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $resolvedResourceGroupName -EnvironmentName $EnvironmentName -SolutionName 'automation-account'
+
+if ([string]$deploymentValues['WEB_APP_ENABLED'] -notin @('true', 'false')) { throw 'WEB_APP_ENABLED must be supplied by the deployment output.' }
+$webApp = $null
+if ([string]$deploymentValues['WEB_APP_ENABLED'] -eq 'true') {
+  $webAppsQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Web/sites?api-version=2023-12-01"
+  $webAppsPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$webAppsQuery" -Headers $armHeaders
+  $webApp = Select-ExactMaesterResource -Payload $webAppsPayload -Name ([string]$deploymentValues['WEB_APP_NAME']) `
+    -ProviderType 'Microsoft.Web/sites' -SubscriptionId $SubscriptionId `
+    -ResourceGroupName $resolvedResourceGroupName -EnvironmentName $EnvironmentName `
+    -SolutionName 'automation-account' -Kind WebApp
 }
-if (-not $storageAccount) {
-  $storageAccount = $storagePayload.value[0]
+
+# ──────────────────────────────────────────────
+# Discover Automation Account and get managed identity principal
+# ──────────────────────────────────────────────
+
+$automationQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Automation/automationAccounts?api-version=2023-11-01"
+$automationPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$automationQuery" -Headers $armHeaders
+if (-not $automationPayload.value -or $automationPayload.value.Count -eq 0) {
+  throw "No Automation Account resources were found in resource group '$resolvedResourceGroupName'."
+}
+
+$preferredAutomationAccountName = [string]$deploymentValues['automationAccountName']
+$automationAccount = Select-ExactMaesterResource -Payload $automationPayload -Name $preferredAutomationAccountName `
+  -ProviderType 'Microsoft.Automation/automationAccounts' -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $resolvedResourceGroupName -EnvironmentName $EnvironmentName -SolutionName 'automation-account'
+
+$automationAccountName = $automationAccount.name
+$principalId = & (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Get-ManagedIdentityPrincipal.ps1') `
+  -SubscriptionId $SubscriptionId `
+  -ResourceGroupName $resolvedResourceGroupName `
+  -ProviderNamespace 'Microsoft.Automation' `
+  -ResourceType 'automationAccounts' `
+  -ResourceName $automationAccountName `
+  -ApiVersion '2023-11-01'
+if ([string]::IsNullOrWhiteSpace([string]$deploymentValues['automationPrincipalId']) -or
+    $principalId -ine [string]$deploymentValues['automationPrincipalId']) {
+  throw 'Automation managed identity differs from the deployment output.'
 }
 
 # ──────────────────────────────────────────────
@@ -195,33 +245,6 @@ else {
   Write-Warning 'Signed-in user object id was not available. Storage Blob Data Reader assignment for user was skipped.'
 }
 
-# ──────────────────────────────────────────────
-# Discover Automation Account and get managed identity principal
-# ──────────────────────────────────────────────
-
-$automationQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Automation/automationAccounts?api-version=2023-11-01"
-$automationPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$automationQuery" -Headers $armHeaders
-if (-not $automationPayload.value -or $automationPayload.value.Count -eq 0) {
-  throw "No Automation Account resources were found in resource group '$resolvedResourceGroupName'."
-}
-
-$preferredAutomationAccountName = "aa-$($EnvironmentName.ToLower())"
-$automationAccount = @($automationPayload.value | Where-Object { $_.name -eq $preferredAutomationAccountName }) | Select-Object -First 1
-if (-not $automationAccount) {
-  $foundNames = @($automationPayload.value | ForEach-Object { $_.name } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-  $foundList = if ($foundNames.Count -gt 0) { $foundNames -join ', ' } else { 'none' }
-  throw "Expected Automation Account '$preferredAutomationAccountName' was not found in resource group '$resolvedResourceGroupName'. Found: $foundList. This usually indicates provisioning failed (often quota-related), and setup cannot continue."
-}
-
-$automationAccountName = $automationAccount.name
-
-$principalId = & (Join-Path $PSScriptRoot 'vendor\Azd.MaesterHooks\Get-ManagedIdentityPrincipal.ps1') `
-  -SubscriptionId $SubscriptionId `
-  -ResourceGroupName $resolvedResourceGroupName `
-  -ProviderNamespace 'Microsoft.Automation' `
-  -ResourceType 'automationAccounts' `
-  -ResourceName $automationAccountName `
-  -ApiVersion '2023-11-01'
 
 Set-AzdEnvValue -Name 'AUTOMATION_MI_PRINCIPAL_ID' -Value $principalId
 
@@ -462,10 +485,7 @@ Write-Host "Published runbook '$runbookName' with local script content."
 # Easy Auth on optional Web App
 # ──────────────────────────────────────────────
 
-$webAppsQuery = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Web/sites?api-version=2023-12-01"
-$webAppsPayload = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$webAppsQuery" -Headers $armHeaders
-
-if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
+if ($webApp) {
   if (-not $SecurityGroupObjectId -and -not [string]::IsNullOrWhiteSpace($SecurityGroupDisplayName)) {
     Connect-MgGraphSilent -TenantId $TenantId -Scopes 'Group.Read.All','Directory.Read.All'
 
@@ -540,12 +560,6 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
 
   Connect-MgGraphSilent -TenantId $TenantId -Scopes 'Application.ReadWrite.All','Directory.Read.All','DelegatedPermissionGrant.ReadWrite.All'
 
-  $preferredWebAppName = "app-maester-$($EnvironmentName.ToLower())"
-  $webApp = @($webAppsPayload.value | Where-Object { $_.name -eq $preferredWebAppName }) | Select-Object -First 1
-  if (-not $webApp) {
-    $webApp = $webAppsPayload.value[0]
-  }
-
   $webAppName = $webApp.name
   $webAppHostName = $webApp.properties.defaultHostName
   $redirectUri = "https://$webAppHostName/.auth/login/aad/callback"
@@ -553,9 +567,9 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
 
   $encodedDisplayName = [System.Uri]::EscapeDataString("'$easyAuthDisplayName'")
   $existingAppResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq $encodedDisplayName"
+  $existingApp = Select-UniqueGraphApplication -Response $existingAppResponse -ExpectedValue $easyAuthDisplayName
   $desiredRedirectUris = @($redirectUri)
-  $aadApp = if ($existingAppResponse.value -and $existingAppResponse.value.Count -gt 0) {
-    $existingApp = $existingAppResponse.value[0]
+  $aadApp = if ($existingApp) {
 
     $existingRedirectUris = @()
     if ($existingApp.web -and $existingApp.web.redirectUris) {
@@ -594,20 +608,9 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
   }
 
   Write-Host "Persisting Easy Auth Entra app identifiers to azd environment variables..."
-  & azd env set EASY_AUTH_ENTRA_APP_OBJECT_ID $aadApp.id
-  if ($LASTEXITCODE -ne 0) {
-    Write-Warning 'Failed to persist EASY_AUTH_ENTRA_APP_OBJECT_ID to azd environment.'
-  }
-
-  & azd env set EASY_AUTH_ENTRA_APP_CLIENT_ID $aadApp.appId
-  if ($LASTEXITCODE -ne 0) {
-    Write-Warning 'Failed to persist EASY_AUTH_ENTRA_APP_CLIENT_ID to azd environment.'
-  }
-
-  & azd env set EASY_AUTH_ENTRA_APP_DISPLAY_NAME $aadApp.displayName
-  if ($LASTEXITCODE -ne 0) {
-    Write-Warning 'Failed to persist EASY_AUTH_ENTRA_APP_DISPLAY_NAME to azd environment.'
-  }
+  Set-AzdEnvValue -Name 'EASY_AUTH_ENTRA_APP_OBJECT_ID' -Value $aadApp.id
+  Set-AzdEnvValue -Name 'EASY_AUTH_ENTRA_APP_CLIENT_ID' -Value $aadApp.appId
+  Set-AzdEnvValue -Name 'EASY_AUTH_ENTRA_APP_DISPLAY_NAME' -Value $aadApp.displayName
 
   $servicePrincipalResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$($aadApp.appId)'"
   $easyAuthServicePrincipal = $null
@@ -704,4 +707,68 @@ if ($webAppsPayload.value -and $webAppsPayload.value.Count -gt 0) {
   Write-Host "Easy Auth admin consent scopes: $consentScope"
   Write-Host "Easy Auth security group: $SecurityGroupObjectId (source: $securityGroupSource)"
 }
+
+# The infrastructure creates the weekly schedule without an association. Attach it
+# only after the locally maintained runbook has replaced the pinned seed content.
+$expectedRunbookContent = $runbookContent.TrimStart([char]0xFEFF).Replace("`r`n", "`n")
+$publishedLocalRunbook = $false
+$runbookResourceUri = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName`?api-version=$armApiVersion"
+$contentUri = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName/content?api-version=$armApiVersion"
+for ($attempt = 0; $attempt -lt 30; $attempt++) {
+  $runbookResource = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$runbookResourceUri" -Headers $armHeaders
+  if ($runbookResource.properties.state -eq 'Published') {
+    $publishedContent = [string](Invoke-RestMethod -Method GET -Uri "https://management.azure.com$contentUri" -Headers $armHeaders)
+    if ($publishedContent.TrimStart([char]0xFEFF).Replace("`r`n", "`n") -ceq $expectedRunbookContent) {
+      $publishedLocalRunbook = $true
+      break
+    }
+  }
+  Start-Sleep -Seconds 2
+}
+if (-not $publishedLocalRunbook) { throw 'Local Maester runbook publication was not confirmed; weekly schedule was not attached.' }
+
+$deploymentJson = & azd env get-values --output json -e $EnvironmentName --cwd $projectRoot 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($deploymentJson | Out-String))) {
+  throw 'The selected azd environment could not be read before schedule attachment.'
+}
+try { $deploymentValues = $deploymentJson | ConvertFrom-Json -AsHashtable }
+catch { throw 'The selected azd environment returned invalid values before schedule attachment.' }
+if ($null -eq $deploymentValues -or [string]$deploymentValues.AZURE_ENV_NAME -cne $EnvironmentName -or
+    [string]$deploymentValues.AZURE_SUBSCRIPTION_ID -ine $SubscriptionId -or
+    [string]$deploymentValues.AZURE_RESOURCE_GROUP -ine $resolvedResourceGroupName) {
+  throw 'The selected azd environment changed before schedule attachment.'
+}
+$expectedAutomationAccountId = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName"
+$jobScheduleId = [string]$deploymentValues['AUTOMATION_JOB_SCHEDULE_ID']
+$parsedJobScheduleId = [guid]::Empty
+if ([string]::IsNullOrWhiteSpace($jobScheduleId) -or -not [guid]::TryParse($jobScheduleId, [ref]$parsedJobScheduleId)) {
+  throw 'AUTOMATION_JOB_SCHEDULE_ID must be a GUID before attaching the weekly schedule.'
+}
+$jobScheduleUri = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/jobSchedules/$jobScheduleId`?api-version=2023-11-01"
+$liveAccount = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$expectedAutomationAccountId`?api-version=2023-11-01" -Headers $armHeaders
+$liveSchedules = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$expectedAutomationAccountId/jobSchedules?api-version=2023-11-01" -Headers $armHeaders
+if ($null -eq $liveSchedules.value -or $liveSchedules.value -isnot [System.Collections.IList] -or
+    ($liveSchedules.PSObject.Properties['nextLink'] -and $liveSchedules.nextLink)) {
+  throw 'Automation jobSchedule inventory was incomplete before association.'
+}
+Assert-MaesterJobScheduleWriteTarget -ExpectedAccountId $expectedAutomationAccountId -ExpectedPrincipalId $principalId `
+  -JobScheduleId $jobScheduleId -Account $liveAccount -JobSchedules @($liveSchedules.value) `
+  -ReceiptAccountId ([string]$deploymentValues['AUTOMATION_OWNED_ACCOUNT_ID']) `
+  -ReceiptPrincipalId ([string]$deploymentValues['AUTOMATION_OWNED_PRINCIPAL_ID']) `
+  -ReceiptJobScheduleId ([string]$deploymentValues['AUTOMATION_OWNED_JOB_SCHEDULE_ID']) `
+  -AdoptAccountId ([string]$deploymentValues['AUTOMATION_ADOPT_ACCOUNT_ID']) `
+  -AdoptPrincipalId ([string]$deploymentValues['AUTOMATION_ADOPT_PRINCIPAL_ID']) `
+  -AdoptJobScheduleId ([string]$deploymentValues['AUTOMATION_ADOPT_JOB_SCHEDULE_ID'])
+$jobScheduleBody = @{ properties = @{ schedule = @{ name = 'maester-weekly-sunday' }; runbook = @{ name = $runbookName } } } | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Method PUT -Uri "https://management.azure.com$jobScheduleUri" -Headers $armHeaders -Body $jobScheduleBody -ContentType 'application/json' | Out-Null
+if ($liveAccount.id -ine $expectedAutomationAccountId -or $liveAccount.identity.principalId -ine $principalId) {
+  throw 'The Automation account identity changed before ownership could be recorded.'
+}
+$verifiedSchedule = Invoke-RestMethod -Method GET -Uri "https://management.azure.com$jobScheduleUri" -Headers $armHeaders
+Assert-MaesterOwnershipReceiptTarget -ExpectedAccountId $expectedAutomationAccountId -ExpectedPrincipalId $principalId `
+  -ExpectedJobScheduleId $jobScheduleId -Account $liveAccount -JobSchedule $verifiedSchedule
+Set-AzdEnvValue -Name 'AUTOMATION_OWNED_ACCOUNT_ID' -Value $expectedAutomationAccountId
+Set-AzdEnvValue -Name 'AUTOMATION_OWNED_PRINCIPAL_ID' -Value $principalId
+Set-AzdEnvValue -Name 'AUTOMATION_OWNED_JOB_SCHEDULE_ID' -Value $jobScheduleId
+Write-Host "Attached verified local runbook '$runbookName' to the weekly schedule."
 

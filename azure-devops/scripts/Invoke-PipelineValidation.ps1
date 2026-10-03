@@ -26,6 +26,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'PipelineValidation.Core.psm1') -Force
 
 function ConvertTo-PlainTextToken {
   param(
@@ -69,43 +70,6 @@ function Get-OptionalPropertyValue {
   }
 
   return $null
-}
-
-function Test-RunContainsExpectedMaesterFailures {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$Organization,
-
-    [Parameter(Mandatory = $true)]
-    [string]$Project,
-
-    [Parameter(Mandatory = $true)]
-    [string]$RunId
-  )
-
-  try {
-    $logsUri = "https://dev.azure.com/$Organization/$Project/_apis/build/builds/$RunId/logs?api-version=7.1-preview.2"
-    $logsResponse = Invoke-ADOPSRestMethod -Method GET -Uri $logsUri
-    $logItems = @($logsResponse.value)
-
-    foreach ($logItem in $logItems) {
-      $logUrl = [string](Get-OptionalPropertyValue -InputObject $logItem -PropertyName 'url')
-      if ([string]::IsNullOrWhiteSpace($logUrl)) {
-        continue
-      }
-
-      $logContent = Invoke-ADOPSRestMethod -Method GET -Uri $logUrl
-      $logText = [string]$logContent
-      if ($logText -match 'Maester test\(s\) failed' -or $logText -match 'There are one or more test failures detected in result files') {
-        return $true
-      }
-    }
-  }
-  catch {
-    Write-Verbose ("Could not inspect pipeline run logs for failure classification. Error: {0}" -f $_.Exception.Message)
-  }
-
-  return $false
 }
 
 Import-Module Az.Accounts -Force
@@ -239,7 +203,7 @@ if ($runResult -eq 'succeeded') {
   $validationPassed = $true
 }
 elseif ($runResult -eq 'failed') {
-  $isExpectedFailure = Test-RunContainsExpectedMaesterFailures -Organization $AdoOrganization -Project $AdoProject -RunId $runId
+  $isExpectedFailure = Test-ExpectedMaesterFinding -Organization $AdoOrganization -Project $AdoProject -RunId $runId
   if ($isExpectedFailure) {
     Write-Warning "Pipeline run '$runId' completed with result 'failed' because Maester reported test findings. Treating this as successful validation."
     $validationPassed = $true

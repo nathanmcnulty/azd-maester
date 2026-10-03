@@ -1,4 +1,4 @@
-﻿# Container App Job azd solution
+# Container App Job azd solution
 
 Deploys a production-style Maester automation solution on Azure with:
 
@@ -117,6 +117,7 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 ## Script map
 
 - azd hooks: `scripts/Run-AzdPreUp.ps1`, `scripts/Run-AzdPreProvision.ps1`, `scripts/Run-AzdPostProvision.ps1`, `scripts/Run-AzdPreDown.ps1`
+- Direct preprovision, setup, and postprovision runs require selecting the target with `azd env select <env>` and passing `-EnvironmentName <env>`; the hook verifies that selection and its Azure scope before changes.
 - Internal setup/validation: `scripts/Setup-PostDeploy.ps1`, `scripts/Invoke-JobValidation.ps1`
 - Container runner script (uploaded to Azure Files): `scripts/Invoke-MaesterContainerJob.ps1`
 - ACR image build: `scripts/Build-MaesterImage.ps1`, `Dockerfile`
@@ -124,7 +125,7 @@ The generated setup summary in `outputs/<env>-setup-summary.md` includes tracked
 ## Runtime behavior
 
 - Weekly schedule (Sunday midnight UTC). To run at a different time or frequency, edit the `cronExpression` in `infra/main.bicep` (e.g. `'30 6 * * 1'` for Monday 6:30 UTC), then re-run `azd provision`.
-- Default image: `mcr.microsoft.com/powershell:lts-mariner-2.0` (modules installed at startup)
+- Default image: an immutable `mcr.microsoft.com/powershell:lts-mariner-2.0` digest with exact SHA-256 verified modules from `runtime-packages.lock.json`. Optional ACR builds resolve a new immutable image digest before updating the job.
 - With `-IncludeACR`: custom image with modules pre-installed (faster startup)
 - Runner script is always mounted from Azure Files (never baked into image) for easy updates
 - Outputs:

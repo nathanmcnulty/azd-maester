@@ -13,7 +13,7 @@ param location string = resourceGroup().location
 param environmentName string = 'dev'
 
 @description('Container image to use for the Maester job')
-param imageName string = 'mcr.microsoft.com/powershell:lts-mariner-2.0'
+param imageName string = 'mcr.microsoft.com/powershell:lts-mariner-2.0@sha256:77d815b197b36e1f9fa454effa4edd405ce793ad5c16e57489316b9637879951'
 
 @description('Optional user-assigned managed identity resource id')
 param userAssignedIdentityResourceId string = ''
@@ -428,6 +428,9 @@ output containerAppJobName string = containerAppJob.name
 output containerAppJobPrincipalId string = containerAppJob.identity.principalId
 output storageAccountName string = storageAccount.name
 output managedEnvironmentName string = managedEnvironment.name
+output STORAGE_ACCOUNT_NAME string = storageAccount.name
+output WEB_APP_NAME string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
+output WEB_APP_ENABLED string = includeWebApp ? 'true' : 'false'
 output acrName string = includeACR ? acr.name : ''
 output acrLoginServer string = includeACR ? acr!.properties.loginServer : ''
 output webAppName string = includeWebApp ? maesterWebApp!.outputs.webAppName : ''
