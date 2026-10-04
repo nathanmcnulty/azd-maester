@@ -67,8 +67,8 @@ Defaults:
 
 ## Operations
 
-- Full deployment verification (optional):
-  `./scripts/Test-AzdDeployment.ps1 -EnvironmentName <env> -SubscriptionId <subId> -TenantId <tenantId> -IncludeWebApp $true -SecurityGroupObjectId <groupObjectId>`
+- Runbook job validation after provision (starts an Automation job; review the Maester report for test outcomes):
+  `./scripts/Invoke-RunbookValidation.ps1 -SubscriptionId <subId> -ResourceGroupName <resourceGroup> -AutomationAccountName <automationAccount> -TenantId <tenantId>`
 - Remove environment + Azure resources (includes predown cleanup):
   `azd down -e <env> --force --purge`
 - Optionally remove local azd env:
