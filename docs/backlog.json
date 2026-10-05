@@ -1,0 +1,281 @@
+{
+  "schemaVersion": "1.0.0",
+  "repository": "nathanmcnulty/azd-maester",
+  "sourceRevision": "4b6328701541126e677abc9400a35092d4cd6f66",
+  "capturedAt": "2026-10-04",
+  "items": [
+    {
+      "id": "MCAT-001",
+      "title": "Reconcile this backlog with current source and active work",
+      "kind": "discovery",
+      "priority": "P1",
+      "status": "done",
+      "wave": 0,
+      "problem": "Plans and implementation evidence are spread across files; the captured source can change while other tasks work.",
+      "scope": [
+        "docs/backlog.json",
+        "docs/backlog.md",
+        "Existing roadmap, execution status, open issues and pull requests (read-only)"
+      ],
+      "acceptance": [
+        "Classify each candidate as implemented, still open, superseded or awaiting evidence; retain source links and reasons.",
+        "Inspect dirty state, remotes, worktrees and local environment presence without reading secrets; avoid duplicate work with active owners.",
+        "Resolve the actual offline validation commands and record exact current default-branch/working-tree provenance; do not copy historical live passes to newer code."
+      ],
+      "validation": [
+        "git status --short",
+        "git remote -v",
+        "git worktree list --porcelain",
+        "Read the applicable instructions and validation workflow; read gh issue list and gh pr list for the named repository using nathanmcnulty. Do not create or modify issues/PRs."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "README.md",
+        "https://github.com/nathanmcnulty/azd-maester/pull/26",
+        "https://github.com/nathanmcnulty/azd-maester/pull/28",
+        "https://github.com/nathanmcnulty/azd-maester/pull/30"
+      ],
+      "evidence": [
+        "Reconciled against current main 4b6328701541126e677abc9400a35092d4cd6f66 in a clean worktree. Issues #24, #25 and #27 are resolved by merged PR #28 after the partial PR #26 runner fix; issue #29 is resolved by merged PR #30. Issues #2, #4, #5, #8 and #12 through #15 remain open and map to the proposed feature/migration items. Existing GUI, runtime-pin and README worktrees were inventoried and preserved; no .azure or .env path was present.",
+        "Issue #27 source resolution is PR #28: Resolve-DeploymentTarget.psm1 in all four variants, setup/pre/post scripts and DeploymentTargetBinding.Tests.ps1 bind mutations and receipts to authoritative azd environment/deployment outputs. Issue #29 source resolution is PR #30 at current main: automation-account/README.md now names Invoke-RunbookValidation.ps1 with required target parameters; documentation validation did not run an Azure job.",
+        "Current-base combined offline Pester validation passed 124/124 across root, Automation, Container App Job, Function App and Azure DevOps suites. Provider-looking test messages were produced by mocks; no Azure, Graph, schedule, report delivery or endpoint operation ran."
+      ],
+      "blocker": null,
+      "claim": null
+    },
+    {
+      "id": "MCAT-002",
+      "title": "Make standalone migration and remaining catalog support explicit",
+      "kind": "maintenance",
+      "priority": "P1",
+      "status": "proposed",
+      "wave": 1,
+      "problem": "The root is a guard/catalog and the four standalone hosts are the long-term source; backlog work must not duplicate host fixes.",
+      "scope": [
+        "README.md",
+        "docs/",
+        "azure.yaml"
+      ],
+      "acceptance": [
+        "Map each legacy folder to its canonical standalone host and move future work to that host backlog.",
+        "Root remains non-deployable and folder commands remain accurate during migration.",
+        "Archive or remove folders only after separate authorization and verified history/evidence; no implicit cleanup."
+      ],
+      "validation": [
+        "Use the offline commands in the registered validation workflow; record the exact commands, revision and results before implementation is complete.",
+        "Run focused tests for changed behavior from tests/; fixtures do not prove live-service or endpoint behavior."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "README.md",
+        "https://github.com/nathanmcnulty/azd-maester/issues/15",
+        "https://github.com/nathanmcnulty/azd-maester/issues/14",
+        "https://github.com/nathanmcnulty/azd-maester/issues/13",
+        "https://github.com/nathanmcnulty/azd-maester/issues/12"
+      ],
+      "evidence": [
+        "PR #28 hardens current legacy target binding, package provenance and fail-closed validation, but open issues #12 through #15 still require Azure DevOps authentication, wizard, fallback and empty-repository work. Standalone migration and catalog support remain proposed."
+      ],
+      "blocker": null
+    },
+    {
+      "id": "MCAT-003",
+      "title": "Feature: Add support for custom Maester tests",
+      "kind": "discovery",
+      "priority": "P2",
+      "status": "proposed",
+      "wave": 3,
+      "problem": "Open GitHub report captured 2026-10-03. Reproduce against the current source and reconcile active PRs before changing code; the issue remains the detailed trigger/evidence reference.",
+      "scope": [
+        "Paths and trigger cited in the linked issue",
+        "Focused offline regression tests",
+        "docs/"
+      ],
+      "acceptance": [
+        "Classify the report as still reproducible, already fixed, superseded or requiring live evidence; record the exact current revision.",
+        "For a reproducible defect, demonstrate the linked trigger with an offline regression and apply the smallest fix preserving tenant/target/ownership and failure semantics.",
+        "For a feature, produce a bounded design with compatibility, optional permissions, acceptance and rollout gates before implementation; no live mutation or automatic issue closure."
+      ],
+      "validation": [
+        "Read the issue body and current source/PRs; capture the exact reproduction and existing registered offline validation command.",
+        "Use deterministic fixtures for the described trigger and negative boundary; retain current-source results. Do not rerun production or tenant operations to reproduce it."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "https://github.com/nathanmcnulty/azd-maester/issues/8",
+        "README.md"
+      ],
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "MCAT-004",
+      "title": "Feature: Add -IncludeContainerWebApp option (Caddy) to all solutions",
+      "kind": "discovery",
+      "priority": "P2",
+      "status": "proposed",
+      "wave": 3,
+      "problem": "Open GitHub report captured 2026-10-03. Reproduce against the current source and reconcile active PRs before changing code; the issue remains the detailed trigger/evidence reference.",
+      "scope": [
+        "Paths and trigger cited in the linked issue",
+        "Focused offline regression tests",
+        "docs/"
+      ],
+      "acceptance": [
+        "Classify the report as still reproducible, already fixed, superseded or requiring live evidence; record the exact current revision.",
+        "For a reproducible defect, demonstrate the linked trigger with an offline regression and apply the smallest fix preserving tenant/target/ownership and failure semantics.",
+        "For a feature, produce a bounded design with compatibility, optional permissions, acceptance and rollout gates before implementation; no live mutation or automatic issue closure."
+      ],
+      "validation": [
+        "Read the issue body and current source/PRs; capture the exact reproduction and existing registered offline validation command.",
+        "Use deterministic fixtures for the described trigger and negative boundary; retain current-source results. Do not rerun production or tenant operations to reproduce it."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "https://github.com/nathanmcnulty/azd-maester/issues/5",
+        "README.md"
+      ],
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "MCAT-005",
+      "title": "Feature: Add -IncludeStaticWebApp option to all solutions",
+      "kind": "discovery",
+      "priority": "P2",
+      "status": "proposed",
+      "wave": 3,
+      "problem": "Open GitHub report captured 2026-10-03. Reproduce against the current source and reconcile active PRs before changing code; the issue remains the detailed trigger/evidence reference.",
+      "scope": [
+        "Paths and trigger cited in the linked issue",
+        "Focused offline regression tests",
+        "docs/"
+      ],
+      "acceptance": [
+        "Classify the report as still reproducible, already fixed, superseded or requiring live evidence; record the exact current revision.",
+        "For a reproducible defect, demonstrate the linked trigger with an offline regression and apply the smallest fix preserving tenant/target/ownership and failure semantics.",
+        "For a feature, produce a bounded design with compatibility, optional permissions, acceptance and rollout gates before implementation; no live mutation or automatic issue closure."
+      ],
+      "validation": [
+        "Read the issue body and current source/PRs; capture the exact reproduction and existing registered offline validation command.",
+        "Use deterministic fixtures for the described trigger and negative boundary; retain current-source results. Do not rerun production or tenant operations to reproduce it."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "https://github.com/nathanmcnulty/azd-maester/issues/4",
+        "README.md"
+      ],
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "MCAT-006",
+      "title": "Add support for drift analysis",
+      "kind": "discovery",
+      "priority": "P2",
+      "status": "proposed",
+      "wave": 3,
+      "problem": "Open GitHub report captured 2026-10-03. Reproduce against the current source and reconcile active PRs before changing code; the issue remains the detailed trigger/evidence reference.",
+      "scope": [
+        "Paths and trigger cited in the linked issue",
+        "Focused offline regression tests",
+        "docs/"
+      ],
+      "acceptance": [
+        "Classify the report as still reproducible, already fixed, superseded or requiring live evidence; record the exact current revision.",
+        "For a reproducible defect, demonstrate the linked trigger with an offline regression and apply the smallest fix preserving tenant/target/ownership and failure semantics.",
+        "For a feature, produce a bounded design with compatibility, optional permissions, acceptance and rollout gates before implementation; no live mutation or automatic issue closure."
+      ],
+      "validation": [
+        "Read the issue body and current source/PRs; capture the exact reproduction and existing registered offline validation command.",
+        "Use deterministic fixtures for the described trigger and negative boundary; retain current-source results. Do not rerun production or tenant operations to reproduce it."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "https://github.com/nathanmcnulty/azd-maester/issues/2",
+        "README.md"
+      ],
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "MCAT-007",
+      "title": "Pin legacy runtime dependencies and define ownership of diverged nested sources",
+      "kind": "discovery",
+      "priority": "P1",
+      "status": "done",
+      "wave": 0,
+      "problem": "Open report captured 2026-10-03 during execution reconciliation. Another code-quality task may own an active fix; inspect its PR and current source before dispatch.",
+      "scope": [
+        "Linked issue and current source (read-only)",
+        "Repository-local backlog evidence"
+      ],
+      "acceptance": [
+        "Read the linked issue and current default branch; classify the exact defect, current owner and evidence gap.",
+        "Record a current PR or verified resolution before selecting any implementation; preserve broader feature and live acceptance gates."
+      ],
+      "validation": [
+        "Read current issue and PR state using nathanmcnulty; do not modify or close issues during reconciliation.",
+        "Inspect dirty state and worktrees; resolve the exact current revision and relevant offline commands before implementation."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "https://github.com/nathanmcnulty/azd-maester/issues/25",
+        "https://github.com/nathanmcnulty/azd-maester/pull/28"
+      ],
+      "evidence": [
+        "Issue #25 is fixed by merged PR #28 at d7e65b34b8e37ab7d73b156919f1ae77984602c6: each legacy variant carries immutable runtime package locks, installers and explicit runtime-contract provenance while remaining independently deployable. The PR reports independent byte review, the full offline Pester suite, four Bicep builds, parser and provenance checks; no grants, deliveries, schedules or endpoint changes occurred."
+      ],
+      "blocker": null,
+      "claim": null
+    },
+    {
+      "id": "MCAT-008",
+      "title": "Legacy nested runners and validators can report success after execution failures",
+      "kind": "discovery",
+      "priority": "P1",
+      "status": "done",
+      "wave": 0,
+      "problem": "Open report captured 2026-10-03 during execution reconciliation. Another code-quality task may own an active fix; inspect its PR and current source before dispatch.",
+      "scope": [
+        "Linked issue and current source (read-only)",
+        "Repository-local backlog evidence"
+      ],
+      "acceptance": [
+        "Read the linked issue and current default branch; classify the exact defect, current owner and evidence gap.",
+        "Record a current PR or verified resolution before selecting any implementation; preserve broader feature and live acceptance gates."
+      ],
+      "validation": [
+        "Read current issue and PR state using nathanmcnulty; do not modify or close issues during reconciliation.",
+        "Inspect dirty state and worktrees; resolve the exact current revision and relevant offline commands before implementation."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "https://github.com/nathanmcnulty/azd-maester/issues/24",
+        "https://github.com/nathanmcnulty/azd-maester/pull/26",
+        "https://github.com/nathanmcnulty/azd-maester/pull/28"
+      ],
+      "evidence": [
+        "Issue #24 is fixed in current main by PR #26 and completed by merged PR #28: Automation, Container, Function and Azure DevOps runners now fail on invocation, missing reports and publication errors; validation triggers and receipts are correlated and packaging fails closed. PR #28 reports the full offline Pester suite and four Bicep builds. No hosted run or report delivery is claimed."
+      ],
+      "blocker": null,
+      "claim": null
+    }
+  ]
+}
