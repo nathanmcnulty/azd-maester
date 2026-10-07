@@ -5,8 +5,8 @@
 
 - **Schema version:** 1.0.0
 - **Repository:** nathanmcnulty/azd-maester
-- **Source revision:** `4b6328701541126e677abc9400a35092d4cd6f66`
-- **Captured:** 2026-10-04
+- **Source revision:** `9c86e879f43de090f6fbee0fbb5f35ecbc83c374`
+- **Captured:** 2026-10-07
 - **Items:** 8
 
 ## MCAT-001: Reconcile this backlog with current source and active work
@@ -172,7 +172,7 @@ Review MCAT-008 against the current repository state. Its status or authorizatio
 
 - **Kind:** maintenance
 - **Priority:** P1
-- **Status:** proposed
+- **Status:** done
 - **Wave:** 1
 - **Authorization:** local-only
 - **Blocker:** _none_
@@ -210,14 +210,24 @@ The root is a guard/catalog and the four standalone hosts are the long-term sour
 **Sources:**
 
 - README.md
-- https&colon;//github.com/nathanmcnulty/azd-maester/issues/15
-- https&colon;//github.com/nathanmcnulty/azd-maester/issues/14
-- https&colon;//github.com/nathanmcnulty/azd-maester/issues/13
+- azure.yaml
+- scripts/Run-AzdRootGuard.ps1
+- https&colon;//github.com/nathanmcnulty/azd-maester-azureautomation/blob/main/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/blob/main/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-functionapp/blob/main/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-azuredevops/blob/main/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-azuredevops/pull/18
 - https&colon;//github.com/nathanmcnulty/azd-maester/issues/12
+- https&colon;//github.com/nathanmcnulty/azd-maester/issues/13
+- https&colon;//github.com/nathanmcnulty/azd-maester/issues/14
+- https&colon;//github.com/nathanmcnulty/azd-maester/issues/15
 
 **Evidence:**
 
-- PR &num;28 hardens current legacy target binding, package provenance and fail-closed validation, but open issues &num;12 through &num;15 still require Azure DevOps authentication, wizard, fallback and empty-repository work. Standalone migration and catalog support remain proposed.
+- At exact base 9c86e879f43de090f6fbee0fbb5f35ecbc83c374, README.md maps each retained legacy folder to its canonical standalone repository, host backlog, standalone azd init source and accurate legacy folder command. Read-only GitHub metadata confirmed all four hosts are unarchived with main as the default branch, each README names the documented azd init source, and each docs/backlog.json exists.
+- The repository root remains non-deployable&colon; azure.yaml routes preup and preprovision through scripts/Run-AzdRootGuard.ps1, and a focused offline invocation rejected the root while printing all four retained folder commands. No folder was removed or archived.
+- Issues &num;12 through &num;15 remain open. Standalone Azure DevOps PR &num;18 merged as 6d1930742b93b16dfaf61bc0ceb8f215f6eff5f4 and only repairs repository staging when TEMP is absent with focused cleanup tests; this documentation does not close those issues or claim a future Reference wizard correction or standalone consumer update.
+- Registered offline validation passed 124/124 Pester tests, four Bicep builds and repository-wide PowerShell parsing. Focused mapping checks verified the four standalone links, default branches, README sources and host backlogs. Only README.md and canonical/generated backlog documentation changed; no runtime, deployment, authentication, cloud, publication or cleanup action occurred.
 
 **Review and authorization note:**
 
