@@ -7,20 +7,39 @@ Production-style `azd` templates for running Maester on Azure with Managed Ident
 
 ## Migration status
 
-The supported long-term design is now four standalone public templates:
+The supported long-term sources are four standalone public templates. Use the
+standalone template name shown below for a new deployment. The folders in this
+repository remain available only for existing catalog checkouts during the
+migration.
 
-- [`azd-maester-azuredevops`](https://github.com/nathanmcnulty/azd-maester-azuredevops)
-- [`azd-maester-functionapp`](https://github.com/nathanmcnulty/azd-maester-functionapp)
-- [`azd-maester-azureautomation`](https://github.com/nathanmcnulty/azd-maester-azureautomation)
-- [`azd-maester-containerappjob`](https://github.com/nathanmcnulty/azd-maester-containerappjob)
+| Legacy folder in this repository | Canonical standalone host | Host backlog | New deployment source | Existing catalog checkout command |
+| --- | --- | --- | --- | --- |
+| `automation-account` | [`nathanmcnulty/azd-maester-azureautomation`](https://github.com/nathanmcnulty/azd-maester-azureautomation) | [`docs/backlog.json`](https://github.com/nathanmcnulty/azd-maester-azureautomation/blob/main/docs/backlog.json) | `azd init -t nathanmcnulty/azd-maester-azureautomation` | `cd automation-account` then `azd up` |
+| `container-app-job` | [`nathanmcnulty/azd-maester-containerappjob`](https://github.com/nathanmcnulty/azd-maester-containerappjob) | [`docs/backlog.json`](https://github.com/nathanmcnulty/azd-maester-containerappjob/blob/main/docs/backlog.json) | `azd init -t nathanmcnulty/azd-maester-containerappjob` | `cd container-app-job` then `azd up` |
+| `function-app` | [`nathanmcnulty/azd-maester-functionapp`](https://github.com/nathanmcnulty/azd-maester-functionapp) | [`docs/backlog.json`](https://github.com/nathanmcnulty/azd-maester-functionapp/blob/main/docs/backlog.json) | `azd init -t nathanmcnulty/azd-maester-functionapp` | `cd function-app` then `azd up` |
+| `azure-devops` | [`nathanmcnulty/azd-maester-azuredevops`](https://github.com/nathanmcnulty/azd-maester-azuredevops) | [`docs/backlog.json`](https://github.com/nathanmcnulty/azd-maester-azuredevops/blob/main/docs/backlog.json) | `azd init -t nathanmcnulty/azd-maester-azuredevops` | `cd azure-devops` then `azd up` |
 
-Each standalone template pins the stable Maester module `2.2.0` and vendors
-the shared hook/permission behavior and optional report web app from
+Each standalone repository uses `main` as its default branch and its README
+names the corresponding `azd init -t` source. Each template pins the stable
+Maester module `2.2.0` and vendors shared hook/permission behavior and the
+optional report web app from
 [`azd-reference`](https://github.com/nathanmcnulty/azd-reference), with exact
 component revisions and hashes in `azd-components.lock.json`.
 
-This catalog is intentionally not archived yet. It remains available during
-the migration; new deployments should use one of the standalone repositories.
+Route future host defects and implementation work to the corresponding
+standalone repository and its `docs/backlog.json`. This catalog backlog tracks
+only remaining catalog/migration work and defects in the retained legacy copy.
+The Azure DevOps reports [#12](https://github.com/nathanmcnulty/azd-maester/issues/12),
+[#13](https://github.com/nathanmcnulty/azd-maester/issues/13),
+[#14](https://github.com/nathanmcnulty/azd-maester/issues/14), and
+[#15](https://github.com/nathanmcnulty/azd-maester/issues/15) remain open here.
+The standalone Azure DevOps [PR #18](https://github.com/nathanmcnulty/azd-maester-azuredevops/pull/18)
+fixes only repository staging when `TEMP` is absent; it does not resolve or
+close those broader reports.
+
+This catalog is intentionally not archived. Removing or archiving the legacy
+folders requires separate authorization plus verified source history and
+migration evidence.
 
 https://github.com/user-attachments/assets/c2781a8e-46f6-4be0-8bf2-27f3b6425748
 
@@ -33,11 +52,18 @@ https://github.com/user-attachments/assets/c2781a8e-46f6-4be0-8bf2-27f3b6425748
 
 ## Recommended starting point
 
-Use `automation-account` first. It has the simplest setup and serves as the reference pattern for the other solutions.
+For a new deployment, start with
+[`nathanmcnulty/azd-maester-azureautomation`](https://github.com/nathanmcnulty/azd-maester-azureautomation).
+It has the simplest setup and serves as the reference pattern for the other
+standalone solutions.
 
 ## Quickstart by solution
 
-After `azd init -t nathanmcnulty/azd-maester`, choose a solution folder and run `azd up` there. There is deliberately no truthful root-level `azd init ... && azd up` deployment command:
+For a new deployment, run the standalone `azd init -t` command from the mapping
+table, then run `azd up` from the initialized template root.
+
+For an existing checkout of this catalog repository, choose a retained solution
+folder and run `azd up` there:
 
 - ### [automation-account](automation-account/README.md)
   - `cd automation-account`
@@ -52,7 +78,9 @@ After `azd init -t nathanmcnulty/azd-maester`, choose a solution folder and run 
   - `cd azure-devops`
   - `azd up`
 
-If you accidentally run `azd up` from the repository root, a guard script prints these folder-specific commands and exits before provisioning.
+The repository root has no deployable infrastructure. If you run `azd up` from
+the root, the guard prints these folder-specific legacy commands and exits before
+provisioning.
 
 `azd up` runs a full interactive preprovision wizard for include flags and required values (for example security group and Azure DevOps org/project).
 
