@@ -98,7 +98,7 @@
       "title": "Feature: Add support for custom Maester tests",
       "kind": "discovery",
       "priority": "P2",
-      "status": "proposed",
+      "status": "done",
       "wave": 3,
       "problem": "Open GitHub report captured 2026-10-03. Reproduce against the current source and reconcile active PRs before changing code; the issue remains the detailed trigger/evidence reference.",
       "scope": [
@@ -120,9 +120,15 @@
       "components": [],
       "sources": [
         "https://github.com/nathanmcnulty/azd-maester/issues/8",
-        "README.md"
+        "README.md",
+        "docs/custom-tests-design.md"
       ],
-      "evidence": [],
+      "evidence": [
+        "2026-10-11 source-only feature-design assessment at catalog d232b49e5d727cb8427004bd798dcd6385ddedfe classified issue #8 as still-unimplemented: exact current selectors in all four canonical standalone hosts choose only embedded Maester 2.2.0 test roots. Fresh heads, source/permalink matrix, package identity/hash/path boundaries, optional permission and rollout gates are recorded in docs/custom-tests-design.md.",
+        "Completed only the original feature-design acceptance; no custom-test package verifier, transport or runtime execution is implemented. Issue #8 remains OPEN as the functional request, with future implementation routed to canonical host backlogs. Default-off design preserves existing target/ownership, failure, receipt and report semantics; no grants or automatic blob deletion follow from metadata.",
+        "PowerShell 7.6.6 registered full root/four-host Pester -CI suite passed124/124, zero failures/skips/not-run; four Bicep0.46.1 builds and106-file parser check passed. Twelve isolated actual-selector AST fixtures passed without invoking Maester or executing custom code. Fixtures prove current selection only, not the proposed package verifier, tenant behavior or delivery.",
+        "Only assessment/canonical/generated backlog docs changed. All runtime publishers, IaC, permissions, component locks and defaults remain unchanged. Existing older runtime metadata is a future 7.6+ rollout gap; no lower-version validation, provider availability, live execution, production adoption or issue closure is claimed."
+      ],
       "blocker": null
     },
     {
