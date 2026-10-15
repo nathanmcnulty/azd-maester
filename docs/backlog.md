@@ -7,7 +7,7 @@
 - **Repository:** nathanmcnulty/azd-maester
 - **Source revision:** `9c86e879f43de090f6fbee0fbb5f35ecbc83c374`
 - **Captured:** 2026-10-07
-- **Items:** 8
+- **Items:** 10
 
 ## MCAT-001: Reconcile this backlog with current source and active work
 
@@ -293,7 +293,7 @@ Review MCAT-003 against the current repository state. Its status or authorizatio
 
 - **Kind:** discovery
 - **Priority:** P2
-- **Status:** proposed
+- **Status:** done
 - **Wave:** 3
 - **Authorization:** local-only
 - **Blocker:** _none_
@@ -335,7 +335,9 @@ Open GitHub report captured 2026-10-03. Reproduce against the current source and
 
 **Evidence:**
 
-- _none_
+- Inspected current catalog revision ba417deae1664e89f996233ddd0e3ced33bab2c4 and the linked open issue; the optional provider is not implemented. Historical malformed prices/configuration are not authoritative.
+- docs/report-viewer-design.md records the bounded three-host design, current authentication/authorization and publisher trust boundaries, permissions, cost models, compatibility, offline validation and native rollout/cleanup gates.
+- Discovery is complete only. MCAT-009/010 coordinate separate proposed implementation tasks in the canonical standalone backlogs; the feature request remains open. No resources, grants, uploads, DNS, app registrations, authentication or live acceptance were performed.
 
 **Review and authorization note:**
 
@@ -345,7 +347,7 @@ Review MCAT-004 against the current repository state. Its status or authorizatio
 
 - **Kind:** discovery
 - **Priority:** P2
-- **Status:** proposed
+- **Status:** done
 - **Wave:** 3
 - **Authorization:** local-only
 - **Blocker:** _none_
@@ -387,7 +389,9 @@ Open GitHub report captured 2026-10-03. Reproduce against the current source and
 
 **Evidence:**
 
-- _none_
+- Inspected current catalog revision ba417deae1664e89f996233ddd0e3ced33bab2c4 and the linked open issue; the optional provider is not implemented. Historical malformed prices/configuration are not authoritative.
+- docs/report-viewer-design.md records the bounded three-host design, current authentication/authorization and publisher trust boundaries, permissions, cost models, compatibility, offline validation and native rollout/cleanup gates.
+- Discovery is complete only. MCAT-009/010 coordinate separate proposed implementation tasks in the canonical standalone backlogs; the feature request remains open. No resources, grants, uploads, DNS, app registrations, authentication or live acceptance were performed.
 
 **Review and authorization note:**
 
@@ -444,3 +448,109 @@ Open GitHub report captured 2026-10-03. Reproduce against the current source and
 **Review and authorization note:**
 
 Review MCAT-006 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
+
+## MCAT-009: Coordinate Caddy viewer delivery in canonical Maester hosts
+
+- **Kind:** maintenance
+- **Priority:** P2
+- **Status:** proposed
+- **Wave:** 4
+- **Authorization:** local-only
+- **Blocker:** _none_
+- **Claim:** _none_
+
+**Problem:**
+
+Discovery is complete but the requested provider remains unimplemented. Future host code belongs in canonical standalone repositories, not retained catalog folders.
+
+**Scope:**
+
+- docs/backlog.json
+- docs/backlog.md
+- docs/report-viewer-design.md
+
+**Acceptance:**
+
+- Coordinate the canonical host tasks azd-maester-azureautomation&colon;MAUTO-006, azd-maester-containerappjob&colon;MCAJ-007, azd-maester-functionapp&colon;MFUNC-007; do not implement the feature in retained legacy folders.
+- Keep this coordination item open until all three host implementations preserve default-off exclusive flags, existing IncludeWebApp behavior, reviewed immutable component distribution and the design permission/publication boundaries.
+- Close only with each host task linked to reviewed code, registered offline checks and separately recorded native authorization, report access, rollback and exact-resource cleanup evidence; discovery or upload alone is insufficient.
+
+**Validation:**
+
+- Validate catalog and host backlog schemas and JSON/Markdown parity; inspect each linked implementation and native evidence before claiming delivery.
+
+**Dependencies:**
+
+- MCAT-004
+
+**Components:**
+
+- _none_
+
+**Sources:**
+
+- docs/report-viewer-design.md
+- https&colon;//github.com/nathanmcnulty/azd-maester-azureautomation/blob/main/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/blob/main/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-functionapp/blob/main/docs/backlog.json
+
+**Evidence:**
+
+- _none_
+
+**Review and authorization note:**
+
+Review MCAT-009 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
+
+## MCAT-010: Coordinate SWA Standard viewer delivery in canonical Maester hosts
+
+- **Kind:** maintenance
+- **Priority:** P2
+- **Status:** proposed
+- **Wave:** 4
+- **Authorization:** local-only
+- **Blocker:** _none_
+- **Claim:** _none_
+
+**Problem:**
+
+Discovery is complete but the requested provider remains unimplemented. Future host code belongs in canonical standalone repositories, not retained catalog folders.
+
+**Scope:**
+
+- docs/backlog.json
+- docs/backlog.md
+- docs/report-viewer-design.md
+
+**Acceptance:**
+
+- Coordinate the canonical host tasks azd-maester-azureautomation&colon;MAUTO-007, azd-maester-containerappjob&colon;MCAJ-008, azd-maester-functionapp&colon;MFUNC-008; do not implement the feature in retained legacy folders.
+- Keep this coordination item open until all three host implementations preserve default-off exclusive flags, existing IncludeWebApp behavior, reviewed immutable component distribution and the design permission/publication boundaries.
+- Close only with each host task linked to reviewed code, registered offline checks and separately recorded native authorization, report access, rollback and exact-resource cleanup evidence; discovery or upload alone is insufficient.
+
+**Validation:**
+
+- Validate catalog and host backlog schemas and JSON/Markdown parity; inspect each linked implementation and native evidence before claiming delivery.
+
+**Dependencies:**
+
+- MCAT-005
+
+**Components:**
+
+- _none_
+
+**Sources:**
+
+- docs/report-viewer-design.md
+- https&colon;//github.com/nathanmcnulty/azd-maester-azureautomation/blob/main/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/blob/main/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-functionapp/blob/main/docs/backlog.json
+
+**Evidence:**
+
+- _none_
+
+**Review and authorization note:**
+
+Review MCAT-010 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
