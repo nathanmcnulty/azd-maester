@@ -6,36 +6,37 @@
       "path": "automation-account/infra/main.bicep",
       "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
       "sourceCommit": "285a280b633ca77886bb0757478576e26c04914b",
-      "sha256": "1A9E20F631201C05841FDB344DA7B5F44EE7A29EC674F776F160DCFCCBF2B7DA",
+      "sha256": "203F98C696EA7AD90E8D513539ADAF1F708793B94D795955CA8671977DAB8B42",
       "sourceSha256": "782092D7DBD950DD2D58FE125B5F93002E0597A9DD6C2FDD28242997BDD17F15",
       "sourceMatch": false,
-      "legacyReason": "Legacy Automation infrastructure adds explicit storage and optional Web App binding outputs."
+      "legacyReason": "Maintained Automation infrastructure uses PowerShell 7.6 with explicit storage and optional Web App binding outputs."
     },
     {
       "path": "automation-account/scripts/Invoke-MaesterAutomationRunbook.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
       "sourceCommit": "285a280b633ca77886bb0757478576e26c04914b",
-      "sha256": "D8ABDA98F528975704EC7731CC58924879865E282B1A193B5908131D1B322D58",
+      "sha256": "4C9DD7CBB6817B97726A8EFAFEA2FA74FD7E66ADF106822551ABC12112AEE336",
       "sourceSha256": "D8ABDA98F528975704EC7731CC58924879865E282B1A193B5908131D1B322D58",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "legacyReason": "Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "automation-account/scripts/Invoke-RunbookValidation.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
       "sourceCommit": "285a280b633ca77886bb0757478576e26c04914b",
-      "sha256": "F7DAA2954015357901C6A25401FC40CCCFAFA3AF822047C39B9372CA914F0572",
+      "sha256": "8F9E872E10BD8AEE6D13FA91DD06D08D644AAF805CE0F818E428241C2862428F",
       "sourceSha256": "F88BFB870B6F5358543A50DF60FEC4EBD77057E62B58DABC12C6A4639D407405",
       "sourceMatch": false,
-      "legacyReason": "Legacy signed deployment evidence stream checks remain in this validator."
+      "legacyReason": "Legacy signed deployment evidence stream checks remain in this validator. Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "automation-account/scripts/Setup-PostDeploy.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
       "sourceCommit": "201caff54f515d30e5d6d87aa882d722112cd58f",
-      "sha256": "0223EBBBA9FB2A1C5728C6258CE82A7B3528DA63A63AA6821D850036DBCC2740",
+      "sha256": "266B48FDA32F7A30C148EE01B38C8655C1D3594D94048D589A05AB9CA2113DD3",
       "sourceSha256": "D7A47AA9FFAA7EF8F7A8566DD2C4D9F502C4B1A62D69570827EB09773F724DEE",
       "sourceMatch": false,
-      "legacyReason": "Legacy setup combines exact target and selected-environment binding with the reviewed owned-schedule receipt flow."
+      "legacyReason": "Legacy setup combines exact target and selected-environment binding with the reviewed owned-schedule receipt flow. Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "container-app-job/Dockerfile",
@@ -166,10 +167,10 @@
       "path": "function-app/infra/main.bicep",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "A52745648C6F2E4928E39485D614B91818C8A7C9F20475BCA8758C1B19045521",
+      "sha256": "173DDBAC61F74A693F9A0D97802556AC0FECAFB9A444E59FE91DA3C3315E5AB0",
       "sourceSha256": "40A6583C11DD13253A94F0B8153DD7AB7C122A984F31E7A83859B57B13527CC6",
       "sourceMatch": false,
-      "legacyReason": "Legacy Function App hosting differs; private validation container and exact Function/storage/Web App binding outputs are added locally."
+      "legacyReason": "Maintained Function infrastructure supports FC1/B1 with PowerShell 7.6 and retains the private validation container and exact Function/storage/Web App binding outputs."
     },
     {
       "path": "function-app/runtime-packages.lock.json",
@@ -183,9 +184,10 @@
       "path": "function-app/scripts/Install-LockedModules.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "A73E7D7C5161BF2E41375BB704729E5582BD05ECFD9009624724DC551B9308FA",
+      "sha256": "48D0C72F624DA5B88A33574ADD7B33979A151FE192B7DB931979DBC45ECDCF34",
       "sourceSha256": "A73E7D7C5161BF2E41375BB704729E5582BD05ECFD9009624724DC551B9308FA",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "legacyReason": "Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "function-app/scripts/FunctionValidation.Core.psm1",
@@ -199,35 +201,37 @@
       "path": "function-app/scripts/Deploy-FunctionCode.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "CFB3EA5F416B01F509AB35C94F058B08993DA9DA51662F25848209D093D0DEDC",
+      "sha256": "394D769E7BB57C97756F1DC7A42A15F2669E37728DAEFBF099408BAA710A5310",
       "sourceSha256": "CFB3EA5F416B01F509AB35C94F058B08993DA9DA51662F25848209D093D0DEDC",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "legacyReason": "Maintained Function packager requires PowerShell 7.6 and accepts FC1/B1 with the shared 30-minute timeout."
     },
     {
       "path": "function-app/scripts/Invoke-FunctionValidation.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "0A8F92483C7F2CFEABC328531E8A25438E1E5AC2C7258DCB55EC5816659FBB4C",
+      "sha256": "3E60135C472251FB871A0DBD4EFCADFBBCD0179EF1CED145D80D61E8B3AA2142",
       "sourceSha256": "0A8F92483C7F2CFEABC328531E8A25438E1E5AC2C7258DCB55EC5816659FBB4C",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "legacyReason": "Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "function-app/scripts/Run-AzdPostProvision.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "82309FE0A0F298365AA480E1A2A92A2E6A99E36E44EE68D218BF801B466559F6",
+      "sha256": "BA2636082B7363031DF292006DB42FFBB7F0775904CE8ACDBB757C93854C807D",
       "sourceSha256": "189D620292AD0845A4021ECEF0D5170697C93421A8E98D77CA3331D744093066",
       "sourceMatch": false,
-      "legacyReason": "Legacy postprovision summary uses exact Function, storage, optional Web App, and linked hosting-plan identities instead of first-match inventory guesses."
+      "legacyReason": "Legacy postprovision summary uses exact Function, storage, optional Web App, and linked hosting-plan identities instead of first-match inventory guesses. Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "function-app/scripts/Setup-PostDeploy.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "A7E1E97667D3F337ED4B8607D4F06EDDBF5FA4CFBBB305AB85693DC1069B849D",
+      "sha256": "D928436FC0CEA9F990F16102FA612C44EAFDFA1A84582081F95201DFDE02DC1A",
       "sourceSha256": "5733A8BF33511877AEE31F9D0A785AB4E1BD76E3692A9FCC4C32D7E288076946",
       "sourceMatch": false,
-      "legacyReason": "Legacy setup verifies exact Function, storage, and optional Web App identities before role or Easy Auth changes."
+      "legacyReason": "Legacy setup verifies exact Function, storage, and optional Web App identities before role or Easy Auth changes. Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "function-app/src/host.json",
@@ -241,9 +245,10 @@
       "path": "function-app/src/profile.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "81ADDA327E13E246865AE6D70599FF88E4D88447CB04C695545A6B2375B58BE9",
+      "sha256": "3E78DD7F8AF725F9AD166BACBCADDCD3F0797C1CF60EB68DFA02A6D9659CB6B8",
       "sourceSha256": "81ADDA327E13E246865AE6D70599FF88E4D88447CB04C695545A6B2375B58BE9",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "legacyReason": "Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "function-app/src/requirements.psd1",
@@ -257,9 +262,10 @@
       "path": "function-app/src/MaesterTimerTrigger/run.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "167B0F527AECA4631CE41533DFECE8D0677D9C1E710B75D7521147AC921E25F2",
+      "sha256": "ED735A3893E19641EDEFAA44D89CD4D3BC601CA7BB1C7CEEAEEEB609CBF5D70D",
       "sourceSha256": "167B0F527AECA4631CE41533DFECE8D0677D9C1E710B75D7521147AC921E25F2",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "legacyReason": "Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "function-app/src/MaesterValidationTrigger/function.json",
@@ -273,26 +279,28 @@
       "path": "function-app/src/MaesterValidationTrigger/run.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "80F7956ED2B3F0B53664E77FC15D8C49DF3DC5DC027C77989760CB350EED2A1C",
+      "sha256": "52DA28D8D57D646592FEE3875D326057F7AEA5A92B28121B299ACB13666633ED",
       "sourceSha256": "80F7956ED2B3F0B53664E77FC15D8C49DF3DC5DC027C77989760CB350EED2A1C",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "legacyReason": "Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "automation-account/scripts/Run-AzdPreProvision.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
       "sourceCommit": "201caff54f515d30e5d6d87aa882d722112cd58f",
-      "sha256": "F0CA81F982129E8753BEBEE7FA8988E098B94BF7ED457215FB7B73264CD03C26",
+      "sha256": "EA57F3C275E7FBA62C4ECCFB1CFE2D6470F5595EC279C1CE016816872EE82C5A",
       "sourceSha256": "300E539C8E4F2B96325170EB57620DDA08F087079BA8AA615A5893C4BFA79C51",
       "sourceMatch": false,
-      "legacyReason": "Legacy preprovision adapts the reviewed exact-owned association flow to its local selected-environment helper and explicit azd writes."
+      "legacyReason": "Legacy preprovision adapts the reviewed exact-owned association flow to its local selected-environment helper and explicit azd writes. Maintained copy requires PowerShell 7.6."
     },
     {
       "path": "automation-account/scripts/JobScheduleOwnership.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
       "sourceCommit": "201caff54f515d30e5d6d87aa882d722112cd58f",
-      "sha256": "3FF129519763EEC53AC8496E1ECF4B42085F91CC7327D23655C5B9A063957F18",
+      "sha256": "CA9931F1493152DB7C43D41404DFAB6126BC0B06EBA0C92BC7EA924E2C194709",
       "sourceSha256": "3FF129519763EEC53AC8496E1ECF4B42085F91CC7327D23655C5B9A063957F18",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "legacyReason": "Maintained copy requires PowerShell 7.6."
     }
   ],
   "localFiles": [
@@ -318,8 +326,8 @@
     },
     {
       "path": "automation-account/scripts/Run-AzdPostProvision.ps1",
-      "sha256": "668756B619AE7ECADD82901714BC6BDB6B8AEC70EFA6A2858457A9391AC817BB",
-      "reason": "Legacy postprovision reads receipts from the explicitly selected azd environment."
+      "sha256": "E176741C470A882DCEB4EABAD4FA3700FB2BF502A7FB42797686ABC7D2A75B73",
+      "reason": "Legacy postprovision reads receipts from the explicitly selected azd environment. Requires PowerShell 7.6."
     },
     {
       "path": "container-app-job/scripts/Run-AzdPostProvision.ps1",
@@ -343,8 +351,8 @@
     },
     {
       "path": "function-app/scripts/Run-AzdPreProvision.ps1",
-      "sha256": "43F6FC41FA8F7F461444F47B1FA6B176B2EC7AF462865D9503763F383082AAB6",
-      "reason": "Legacy preprovision checks the selected azd environment before invoking the pinned wizard."
+      "sha256": "AAF4AED57F125E0BA87C1A97725FFEA29132A0BD450FBFB3E542CD36F8115867",
+      "reason": "Legacy preprovision checks the selected azd environment before invoking the pinned wizard. Requires PowerShell 7.6."
     }
   ]
 }

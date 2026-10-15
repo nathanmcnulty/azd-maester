@@ -1,4 +1,5 @@
-﻿[CmdletBinding()]
+﻿#Requires -Version 7.6
+[CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
   [string]$SubscriptionId,
@@ -16,7 +17,7 @@ param(
   [switch]$IncludeTeams,
 
   [Parameter(Mandatory = $false)]
-  [ValidateSet('FC1', 'B1', 'Y1')]
+  [ValidateSet('FC1', 'B1')]
   [string]$Plan = 'FC1'
 )
 
@@ -47,30 +48,7 @@ if (-not (Test-Path -Path $triggerPath -PathType Container)) {
 $stagingPath = Join-Path -Path $env:TEMP -ChildPath "func-staging-$([guid]::NewGuid().ToString('N'))"
 Copy-Item -Path $srcPath -Destination $stagingPath -Recurse -Force
 
-# Adjust functionTimeout in host.json based on hosting plan.
-# Y1 (Consumption) maxes out at 10 minutes. B1/FC1 support longer timeouts.
 $hostJsonPath = Join-Path -Path $stagingPath -ChildPath 'host.json'
-if (Test-Path -Path $hostJsonPath) {
-  $hostJson = Get-Content -Path $hostJsonPath -Raw | ConvertFrom-Json
-
-  switch ($Plan) {
-    'Y1' {
-      # Consumption plan: max 10 minutes
-      $hostJson.functionTimeout = '00:10:00'
-    }
-    'B1' {
-      # App Service Basic (Dedicated): allow 30 minutes
-      $hostJson.functionTimeout = '00:30:00'
-    }
-    'FC1' {
-      # Flex Consumption: allow 30 minutes
-      $hostJson.functionTimeout = '00:30:00'
-    }
-  }
-
-  $hostJson | ConvertTo-Json -Depth 10 | Set-Content -Path $hostJsonPath -Encoding utf8
-  Write-Host "Set functionTimeout to $($hostJson.functionTimeout) for plan $Plan"
-}
 
 # Bundle exact, SHA-256 verified modules for every hosting plan. Managed
 # dependencies and Save-Module can otherwise drift between deployments.

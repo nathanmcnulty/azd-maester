@@ -72,8 +72,8 @@ param webAppSkuName string = 'F1'
 @description('Enable can-not-delete locks on key resources')
 param enableResourceLocks bool = true
 
-@description('Function App hosting plan SKU: FC1 (Flex Consumption), B1 (App Service Basic), Y1 (Consumption)')
-@allowed(['FC1', 'B1', 'Y1'])
+@description('Function App hosting plan SKU: FC1 (Flex Consumption), B1 (App Service Basic)')
+@allowed(['FC1', 'B1'])
 @metadata({
   azd: {
     default: 'FC1'
@@ -209,35 +209,28 @@ resource storageManagementPolicy 'Microsoft.Storage/storageAccounts/managementPo
 }
 
 // ──────────────────────────────────────────────
-// Function App (Linux, PowerShell 7.4)
+// Function App (Linux, PowerShell 7.6)
 // Plan varies by functionAppPlan parameter:
-//   Y1 = Consumption (Dynamic, 10-min timeout max)
 //   B1 = App Service Basic (Dedicated, unlimited timeout)
 //   FC1 = Flex Consumption (Serverless, 30-min+ timeout, no managed deps)
 // ──────────────────────────────────────────────
 
-var isConsumptionPlan = functionAppPlan == 'Y1'
 var isFlexConsumption = functionAppPlan == 'FC1'
-var isDedicatedPlan = !isConsumptionPlan && !isFlexConsumption
+var isDedicatedPlan = functionAppPlan == 'B1'
 
 resource hostingPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: hostingPlanName
   location: location
   tags: resourceTags
-  sku: isConsumptionPlan
+  sku: isFlexConsumption
     ? {
-        name: 'Y1'
-        tier: 'Dynamic'
+        name: 'FC1'
+        tier: 'FlexConsumption'
       }
-    : isFlexConsumption
-      ? {
-          name: 'FC1'
-          tier: 'FlexConsumption'
-        }
-      : {
-          name: functionAppPlan
-          tier: 'Basic'
-        }
+    : {
+        name: functionAppPlan
+        tier: 'Basic'
+      }
   kind: 'functionapp'
   properties: {
     reserved: true
@@ -293,29 +286,15 @@ var functionAppBaseAppSettings = union(functionAppFlexOnlySettings, [
   }
 ])
 
-// Consumption (Y1) requires Azure Files content share settings
-var functionAppConsumptionAppSettings = isConsumptionPlan
-  ? [
-      {
-        name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
-        value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
-      }
-      {
-        name: 'WEBSITE_CONTENTSHARE'
-        value: toLower(functionAppName)
-      }
-    ]
-  : []
-
 // siteConfig for non-Flex plans includes linuxFxVersion; FC1 sets runtime via functionAppConfig
 var functionAppSiteConfigBase = {
   ftpsState: 'Disabled'
   alwaysOn: isDedicatedPlan
-  appSettings: union(functionAppBaseAppSettings, functionAppConsumptionAppSettings)
+  appSettings: functionAppBaseAppSettings
 }
 var functionAppSiteConfig = isFlexConsumption
   ? functionAppSiteConfigBase
-  : union(functionAppSiteConfigBase, { linuxFxVersion: 'PowerShell|7.4' })
+  : union(functionAppSiteConfigBase, { linuxFxVersion: 'PowerShell|7.6' })
 
 var functionAppPropertiesBase = {
   serverFarmId: hostingPlan.id
@@ -341,7 +320,7 @@ var functionAppFlexConfig = {
     }
     runtime: {
       name: 'powershell'
-      version: '7.4'
+      version: '7.6'
     }
   }
 }

@@ -1,4 +1,5 @@
-﻿param(
+﻿#Requires -Version 7.6
+param(
   [Parameter(Mandatory = $false)]
   [string]$StorageAccountName,
 

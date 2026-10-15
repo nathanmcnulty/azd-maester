@@ -88,7 +88,7 @@ param jobScheduleId string = newGuid()
 var automationAccountName = 'aa-${toLower(environmentName)}'
 var scheduleName = 'maester-weekly-sunday'
 var runbookName = 'maester-runbook'
-var runtimeEnvironmentName = 'PowerShell-74-Maester'
+var runtimeEnvironmentName = 'PowerShell-76-Maester'
 var resourceSuffix = toLower(uniqueString(resourceGroup().id, environmentName))
 var storageAccountName = 'stmaester${resourceSuffix}'
 var storageBlobDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
@@ -260,23 +260,23 @@ resource automationDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (e
   }
 }
 
-resource runtime74 'Microsoft.Automation/automationAccounts/runtimeEnvironments@2024-10-23' = {
+resource runtime76 'Microsoft.Automation/automationAccounts/runtimeEnvironments@2024-10-23' = {
   name: runtimeEnvironmentName
   parent: automationAccount
   location: location
   properties: {
     runtime: {
       language: 'PowerShell'
-      version: '7.4'
+      version: '7.6'
     }
     defaultPackages: {}
-    description: 'PowerShell 7.4 custom runtime environment for Maester runbooks'
+    description: 'PowerShell 7.6 custom runtime environment for Maester runbooks'
   }
 }
 
 resource runtimePackageAzAccounts 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
   name: 'Az.Accounts'
-  parent: runtime74
+  parent: runtime76
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/Az.Accounts/5.5.3'
@@ -287,7 +287,7 @@ resource runtimePackageAzAccounts 'Microsoft.Automation/automationAccounts/runti
 
 resource runtimePackageMaester 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
   name: 'Maester'
-  parent: runtime74
+  parent: runtime76
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/Maester/2.2.0'
@@ -298,7 +298,7 @@ resource runtimePackageMaester 'Microsoft.Automation/automationAccounts/runtimeE
 
 resource runtimePackagePester 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
   name: 'Pester'
-  parent: runtime74
+  parent: runtime76
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/Pester/6.2.0'
@@ -309,7 +309,7 @@ resource runtimePackagePester 'Microsoft.Automation/automationAccounts/runtimeEn
 
 resource runtimePackageNuGet 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
   name: 'NuGet'
-  parent: runtime74
+  parent: runtime76
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/NuGet/1.3.3'
@@ -320,7 +320,7 @@ resource runtimePackageNuGet 'Microsoft.Automation/automationAccounts/runtimeEnv
 
 resource runtimePackagePackageManagement 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
   name: 'PackageManagement'
-  parent: runtime74
+  parent: runtime76
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/PackageManagement/1.4.8.1'
@@ -331,7 +331,7 @@ resource runtimePackagePackageManagement 'Microsoft.Automation/automationAccount
 
 resource runtimePackagePowerShellGet 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
   name: 'PowerShellGet'
-  parent: runtime74
+  parent: runtime76
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/PowerShellGet/2.2.5'
@@ -342,7 +342,7 @@ resource runtimePackagePowerShellGet 'Microsoft.Automation/automationAccounts/ru
 
 resource runtimePackageGraphAuth 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = {
   name: 'Microsoft.Graph.Authentication'
-  parent: runtime74
+  parent: runtime76
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/Microsoft.Graph.Authentication/2.41.0'
@@ -353,7 +353,7 @@ resource runtimePackageGraphAuth 'Microsoft.Automation/automationAccounts/runtim
 
 resource runtimePackageExchangeOnlineManagement 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = if (includeExchange) {
   name: 'ExchangeOnlineManagement'
-  parent: runtime74
+  parent: runtime76
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/ExchangeOnlineManagement/3.10.1'
@@ -364,7 +364,7 @@ resource runtimePackageExchangeOnlineManagement 'Microsoft.Automation/automation
 
 resource runtimePackageMicrosoftTeams 'Microsoft.Automation/automationAccounts/runtimeEnvironments/packages@2024-10-23' = if (includeTeams) {
   name: 'MicrosoftTeams'
-  parent: runtime74
+  parent: runtime76
   properties: {
     contentLink: {
       uri: 'https://www.powershellgallery.com/api/v2/package/MicrosoftTeams/8.0.0'
@@ -386,7 +386,7 @@ resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2024-10-23' =
       uri: 'https://raw.githubusercontent.com/maester365/maester/c657a4b8a24267ccd795edb0c7db402e0d440e3b/powershell/public/Invoke-Maester.ps1'
       contentHash: { algorithm: 'sha256', value: 'FF70CB4AB2F32ADA6C5FF5121931D3C8BE45BDBCDB746970C26FB275FFAD312F' }
     }
-    runtimeEnvironment: runtime74.name
+    runtimeEnvironment: runtime76.name
   }
   dependsOn: [
     runtimePackageAzAccounts

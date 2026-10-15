@@ -1,4 +1,5 @@
-﻿# MaesterTimerTrigger/run.ps1
+﻿#Requires -Version 7.6
+# MaesterTimerTrigger/run.ps1
 # Timer-triggered Azure Function that runs Maester assessments.
 # Reads configuration from Function App application settings (environment variables).
 

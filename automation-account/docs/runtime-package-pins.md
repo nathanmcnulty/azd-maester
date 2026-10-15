@@ -1,7 +1,7 @@
 # Automation runtime package lock
 
 `infra/main.bicep` imports exact PSGallery package versions into the PowerShell
-7.4 Automation runtime. Each `contentLink` records the SHA-256 of the downloaded
+7.6 Automation runtime. Each `contentLink` records the SHA-256 of the downloaded
 `.nupkg`. The lab accepted a deliberately incorrect `contentHash` during an
 Automation package import, so that ARM field is **not an enforced integrity
 boundary**. The published local runbook independently downloads each exact
