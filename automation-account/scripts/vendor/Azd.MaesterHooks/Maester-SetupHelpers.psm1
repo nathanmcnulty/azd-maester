@@ -174,12 +174,20 @@ function Get-AzCliAccessToken {
     [Parameter(Mandatory = $true)]
     [string]$Resource,
     [Parameter(Mandatory = $false)]
-    [string]$TenantId
+    [string]$TenantId,
+    [Parameter(Mandatory = $false)]
+    [string]$SubscriptionId
   )
 
   try {
     $tokenArgs = @('account', 'get-access-token', '--resource', $Resource, '-o', 'json')
-    if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+    if (-not [string]::IsNullOrWhiteSpace($SubscriptionId)) {
+      $tokenArgs += @('--subscription', $SubscriptionId)
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+      # Azure CLI accepts either --subscription or --tenant for this command,
+      # but not both. A subscription is already tenant-bound and is the more
+      # precise selector for deployment management tokens.
       $tokenArgs += @('--tenant', $TenantId)
     }
 

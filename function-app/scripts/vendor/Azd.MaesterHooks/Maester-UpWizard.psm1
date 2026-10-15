@@ -239,6 +239,78 @@ function Read-TextChoice {
   }
 }
 
+function ConvertTo-SecurityGroupObjectId {
+  param(
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyString()]
+    [string]$Value
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $null
+  }
+
+  $parsed = [guid]::Empty
+  if (-not [guid]::TryParse($Value.Trim(), [ref]$parsed) -or $parsed -eq [guid]::Empty) {
+    return $null
+  }
+
+  return $parsed.ToString('D')
+}
+
+function Read-SecurityGroupObjectId {
+  param(
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyString()]
+    [string]$CurrentValue,
+
+    [Parameter(Mandatory = $true)]
+    [bool]$InteractiveWizard
+  )
+
+  $normalizedCurrent = ConvertTo-SecurityGroupObjectId -Value $CurrentValue
+  $guidRequirement = 'Enter the Object ID of a Microsoft Entra security group. Create or find one under Microsoft Entra ID > Groups > All groups. To skip this requirement, rerun the wizard and choose No for Include Web App.'
+
+  if (-not $InteractiveWizard) {
+    if ($null -ne $normalizedCurrent) {
+      return $normalizedCurrent
+    }
+
+    throw "SECURITY_GROUP_OBJECT_ID must be a non-empty GUID when INCLUDE_WEB_APP=true. Set it with 'azd env set SECURITY_GROUP_OBJECT_ID <group-object-id>', or set INCLUDE_WEB_APP=false to skip the Web App."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($CurrentValue) -and $null -eq $normalizedCurrent) {
+    Write-Host "The stored SECURITY_GROUP_OBJECT_ID is not a valid non-empty GUID. $guidRequirement"
+  }
+  elseif ([string]::IsNullOrWhiteSpace($CurrentValue)) {
+    Write-Host $guidRequirement
+  }
+
+  $attempts = 0
+  while ($true) {
+    $renderedPrompt = if ($null -ne $normalizedCurrent) {
+      "Security group object ID for Web App Easy Auth [$normalizedCurrent]"
+    }
+    else {
+      'Security group object ID for Web App Easy Auth'
+    }
+
+    $inputValue = Read-Host $renderedPrompt
+    $candidate = if ([string]::IsNullOrWhiteSpace($inputValue)) { $normalizedCurrent } else { $inputValue.Trim() }
+    $normalizedCandidate = ConvertTo-SecurityGroupObjectId -Value $candidate
+    if ($null -ne $normalizedCandidate) {
+      return $normalizedCandidate
+    }
+
+    $attempts++
+    if ($attempts -ge 5) {
+      throw "SECURITY_GROUP_OBJECT_ID must be a non-empty GUID when INCLUDE_WEB_APP=true. $guidRequirement"
+    }
+
+    Write-Host "That value is not a valid non-empty GUID. $guidRequirement"
+  }
+}
+
 function ConvertFrom-AzureScopes {
   param(
     [Parameter(Mandatory = $false)]
@@ -395,11 +467,8 @@ function Invoke-MaesterUpWizard {
 
   $securityGroupObjectId = $securityGroupObjectIdCurrent
   if ($includeWebApp) {
-    $securityGroupObjectId = Read-TextChoice `
-      -Prompt 'Security group object ID for Web App Easy Auth' `
+    $securityGroupObjectId = Read-SecurityGroupObjectId `
       -CurrentValue $securityGroupObjectIdCurrent `
-      -FallbackValue '' `
-      -AllowEmpty $false `
       -InteractiveWizard $interactiveWizard
   }
 
