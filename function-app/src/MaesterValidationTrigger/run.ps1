@@ -1,3 +1,4 @@
+#Requires -Version 7.6
 param([string]$ValidationRequest, $TriggerMetadata)
 
 # The admin API passes a one-use request ID to this dedicated trigger. Scheduled

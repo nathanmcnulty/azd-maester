@@ -7,16 +7,12 @@ its source, plus SHA-256 of both the standalone and nested files. Hashes use
 UTF-8 text without a BOM and normalize line endings to LF so Windows and Linux
 checkouts validate identically.
 
-Twenty-three files match the reviewed standalone source exactly. Twelve files
-retain documented legacy behavior or add exact deployment target binding:
-Automation's signed evidence validation, the Container Job's stable name,
-legacy Azure DevOps authorization setup, and the Function App's hosting and
-setup shape. Four copied local target-binding modules, three preprovision hooks,
-and three legacy postprovision readers are tracked separately because they are
-not present in the pinned standalone revisions. Automation's owned-schedule
-helper matches standalone commit `201caff54f515d30e5d6d87aa882d722112cd58f`
-exactly; its preprovision and setup scripts adapt that revision to the nested
-selected-environment contract.
+The lock distinguishes exact standalone copies from maintained variants and
+records the reason for each difference. The maintained Automation and Function
+entry points require PowerShell 7.6. Host-specific behavior includes selected
+environment binding, owned-schedule validation, the Container Job's stable name,
+and Azure DevOps authorization setup. Local helper and hook files are tracked
+separately when absent from the pinned standalone revision.
 Setup first verifies that the current azd selection matches the requested
 target. It takes storage, workload, managed identity, and optional Web App
 identities from that environment's Bicep outputs, verifies the named resources

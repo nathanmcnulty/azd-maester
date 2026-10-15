@@ -2,12 +2,14 @@
 
 Deploys a production-style Maester automation solution on Azure with:
 
-- Azure Automation (PowerShell 7.4 runtime)
+- Azure Automation (PowerShell 7.6 runtime)
 - Managed identity + Graph permissions
 - Storage-backed report history (`archive`) and latest pointer (`latest/latest.html`)
 - Optional App Service + Easy Auth portal in WebApp mode
 
 ## Quickstart (recommended)
+
+Requires PowerShell 7.6 or later. Offline repository tests use Pester 6.2 or later.
 
 After `azd init -t <your-template-id>` and `cd automation-account`, initiate the login:    
 Login to the azd module: `azd auth login`    
