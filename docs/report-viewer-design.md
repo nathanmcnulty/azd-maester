@@ -53,11 +53,23 @@ auth config or executable publication scripts.
 
 Use separately digest-pinned Caddy and sync-worker images with reviewed source,
 SBOM and provenance. The worker uses an explicitly selected managed identity to
-read only the projection container, downloads fixed pointer/objects into bounded
-ephemeral staging, and atomically replaces the verified local HTML. Caddy mounts
-it read-only, disables browsing/admin ingress and performs no arbitrary proxying.
+read only the projection container, downloads fixed pointer/objects within bounded
+size/time budgets, and atomically swaps one verified immutable in-memory snapshot.
+It serves GET/HEAD only on fixed loopback paths. Caddy uses exact route matchers
+and one literal loopback upstream; disable admin, file serving and arbitrary
+proxy targets. No request-derived URL, blob path or forwarding destination is
+accepted. Expose only Caddy's ingress target port; never expose the worker port.
+No report volume is shared. ACA's current VolumeMount schema has no per-container
+readOnly setting for EmptyDir, so do not emit unsupported Kubernetes fields or
+claim that filesystem permissions provide an equivalent platform guarantee.
 Refreshing reports needs no new revision or runner control-plane permission.
 Image/config changes use a separately reviewed Container App revision.
+
+Caddy and the worker remain trusted together: Caddy can alter responses and
+same-app containers share network resources. The loopback design removes shared
+report-cache writes; it does not isolate against a malicious co-container. Qualify
+loopback binding, exact routes/methods, external worker-port denial, scale-out
+snapshot consistency and worker crash/restart behavior in the native gates.
 
 Containers in the same app are not an identity boundary: assume both can use the
 app's available managed identities. Grant only projection read access, never
@@ -76,7 +88,7 @@ bypass protection. Do not expose reports while auth configuration is incomplete.
 Empty/invalid startup content is unavailable. On refresh failure retain only a
 bounded last-known-good projection, show staleness to authorized readers, and
 apply an explicit maximum stale age. Probe readiness without exposing tenant or
-report data. Bound polling, downloads and cache size. Scale-to-zero requires fresh
+report data. Bound polling, downloads and in-memory snapshot size/count. Scale-to-zero requires fresh
 download/cold-start qualification; minimum replicas zero versus one is an explicit
 latency/cost setting. Roll back image revisions and report pointers separately.
 
@@ -170,6 +182,9 @@ directory. Upload acceptance and green tests do not prove human-visible delivery
 - [Entra app assignments](https://learn.microsoft.com/en-us/entra/identity-platform/howto-restrict-your-app-to-a-set-of-users)
 - [ACA auth configuration](https://learn.microsoft.com/en-us/azure/templates/microsoft.app/containerapps/authconfigs)
 - [ACA Entra auth](https://learn.microsoft.com/en-us/azure/container-apps/authentication-entra)
+- [ACA container/volume schema](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/container-apps/update?view=rest-resource-manager-containerapps-2026-01-01)
+- [ACA multiple containers](https://learn.microsoft.com/en-us/azure/container-apps/containers)
+- [ACA storage mounts](https://learn.microsoft.com/en-us/azure/container-apps/storage-mounts)
 - [ACA identities](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity)
 - [ACA pricing](https://azure.microsoft.com/en-us/pricing/details/container-apps/)
 - [SWA pricing](https://azure.microsoft.com/en-us/pricing/details/app-service/static/)
