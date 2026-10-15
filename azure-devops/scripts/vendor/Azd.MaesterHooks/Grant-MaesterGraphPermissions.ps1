@@ -61,40 +61,108 @@ if (-not $PSBoundParameters.ContainsKey('AppRoleValues')) {
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Complete enumeration is required before any grant decision. Never send a token
+# to a continuation outside this principal's Microsoft Graph collection.
+function Get-MaesterGraphAssignmentList {
+  param([string]$TenantId, [string]$PrincipalObjectId)
+
+  $collectionUri = "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments"
+  $nextUri = "${collectionUri}?`$top=999"
+  $visited = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+  $assignments = [System.Collections.Generic.List[object]]::new()
+  while ($nextUri) {
+    $pageUri = $null
+    if (-not [uri]::TryCreate($nextUri, [UriKind]::Absolute, [ref]$pageUri) -or
+        $pageUri.Scheme -ne 'https' -or $pageUri.Host -ne 'graph.microsoft.com' -or
+        $pageUri.Port -ne 443 -or $pageUri.UserInfo -or $pageUri.Fragment -or
+        $pageUri.AbsolutePath -cne ([uri]$collectionUri).AbsolutePath) {
+      throw 'Graph assignment continuation does not target the expected secure collection.'
+    }
+    if ($visited.Count -ge 100 -or -not $visited.Add($nextUri)) {
+      throw 'Graph assignment pagination exceeded its limit or repeated a page.'
+    }
+    $page = Invoke-GraphRestRequest -Method GET -Uri $nextUri -TenantId $TenantId
+    if ($null -eq $page -or -not $page.PSObject.Properties['value'] -or $null -eq $page.value) {
+      throw 'Graph assignment response is missing its value collection.'
+    }
+    foreach ($assignment in @($page.value)) {
+      $assignments.Add($assignment)
+    }
+    $nextUri = if ($page.PSObject.Properties['@odata.nextLink']) { [string]$page.'@odata.nextLink' } else { $null }
+  }
+  return $assignments.ToArray()
+}
+
+if ([string]::IsNullOrWhiteSpace($TenantId)) { throw 'TenantId must identify the selected deployment tenant.' }
+$principalGuid = [guid]::Empty
+if (-not [guid]::TryParse($PrincipalObjectId, [ref]$principalGuid) -or $principalGuid -eq [guid]::Empty) {
+  throw 'PrincipalObjectId must be a non-empty GUID.'
+}
+$PrincipalObjectId = $principalGuid.ToString()
+
 Import-Module (Join-Path $PSScriptRoot 'Maester-SetupHelpers.psm1') -Force
 Assert-GraphAccess -TenantId $TenantId -Scopes 'Application.Read.All','AppRoleAssignment.ReadWrite.All','Directory.Read.All','Directory.AccessAsUser.All'
 
-$graphServicePrincipal = Invoke-GraphRestRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '00000003-0000-0000-c000-000000000000'"
-if (-not $graphServicePrincipal.value -or $graphServicePrincipal.value.Count -eq 0) {
-  throw 'Microsoft Graph service principal was not found in this tenant.'
+$graphServicePrincipal = Invoke-GraphRestRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '00000003-0000-0000-c000-000000000000'" -TenantId $TenantId
+if (@($graphServicePrincipal.value).Count -ne 1 -or
+    ($graphServicePrincipal.PSObject.Properties['@odata.nextLink'] -and $graphServicePrincipal.'@odata.nextLink')) {
+  throw 'Exactly one Microsoft Graph service principal must be returned in the selected tenant.'
 }
 
 $resourceServicePrincipal = $graphServicePrincipal.value[0]
-$appRoles = @($resourceServicePrincipal.appRoles | Where-Object { $_.value -and $_.allowedMemberTypes -contains 'Application' })
+if ($resourceServicePrincipal.appId -ne '00000003-0000-0000-c000-000000000000') {
+  throw 'The returned service principal is not Microsoft Graph.'
+}
+$appRoles = @($resourceServicePrincipal.appRoles | Where-Object { $_.value -and $_.isEnabled -and $_.allowedMemberTypes -contains 'Application' })
+$existingAssignmentList = @(Get-MaesterGraphAssignmentList -TenantId $TenantId -PrincipalObjectId $PrincipalObjectId)
 
-$existingAssignments = Invoke-GraphRestRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments?`$top=999"
-$existingAssignmentList = @($existingAssignments.value)
-
-foreach ($appRoleValue in $AppRoleValues) {
-  $match = $appRoles | Where-Object { $_.value -eq $appRoleValue }
-  if (-not $match) {
-    throw "App role '$appRoleValue' was not found on Microsoft Graph service principal."
+# Validate the complete requested role set before making the first assignment.
+$requestedRoles = @(
+  foreach ($appRoleValue in @($AppRoleValues | Select-Object -Unique)) {
+    $match = @($appRoles | Where-Object { $_.value -eq $appRoleValue })
+    if ($match.Count -ne 1) {
+      throw "Exactly one enabled application role '$appRoleValue' must exist on Microsoft Graph."
+    }
+    $match[0]
   }
-
-  $alreadyAssigned = @($existingAssignmentList | Where-Object { $_.resourceId -eq $resourceServicePrincipal.id -and $_.appRoleId -eq $match.id })
+)
+$createdAssignment = $false
+foreach ($role in $requestedRoles) {
+  $alreadyAssigned = @($existingAssignmentList | Where-Object {
+    $_.principalId -eq $PrincipalObjectId -and $_.resourceId -eq $resourceServicePrincipal.id -and $_.appRoleId -eq $role.id
+  })
   if ($alreadyAssigned.Count -gt 0) {
-    Write-Host "App role '$appRoleValue' already assigned."
+    Write-Host "App role '$($role.value)' already assigned."
     continue
   }
 
   $body = @{
     principalId = $PrincipalObjectId
     resourceId  = $resourceServicePrincipal.id
-    appRoleId   = $match.id
+    appRoleId   = $role.id
   } | ConvertTo-Json
 
-  Invoke-GraphRestRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments" -Body $body -ContentType 'application/json'
-  Write-Host "Assigned app role '$appRoleValue'."
+  Invoke-GraphRestRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalObjectId/appRoleAssignments" -Body $body -ContentType 'application/json' -TenantId $TenantId | Out-Null
+  $createdAssignment = $true
+}
+
+# Read back exact principal/resource/role tuples before reporting completion.
+# A short, read-only retry permits normal directory propagation after creation.
+if ($createdAssignment) {
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    $observedAssignments = @(Get-MaesterGraphAssignmentList -TenantId $TenantId -PrincipalObjectId $PrincipalObjectId)
+    $missingRoles = @($requestedRoles | Where-Object {
+      $roleId = $_.id
+      -not @($observedAssignments | Where-Object {
+        $_.principalId -eq $PrincipalObjectId -and $_.resourceId -eq $resourceServicePrincipal.id -and $_.appRoleId -eq $roleId
+      }).Count
+    })
+    if ($missingRoles.Count -eq 0) { break }
+    if ($attempt -lt 3) { Start-Sleep -Seconds 2 }
+  }
+  if ($missingRoles.Count -gt 0) {
+    throw "Graph assignments could not be verified for: $($missingRoles.value -join ', '). Rerun after directory propagation; existing grants will be preserved."
+  }
 }
 
 Write-Host 'Graph app role assignment completed.'
