@@ -7,7 +7,7 @@
 - **Repository:** nathanmcnulty/azd-maester
 - **Source revision:** `9c86e879f43de090f6fbee0fbb5f35ecbc83c374`
 - **Captured:** 2026-10-07
-- **Items:** 10
+- **Items:** 11
 
 ## MCAT-001: Reconcile this backlog with current source and active work
 
@@ -401,7 +401,7 @@ Review MCAT-005 against the current repository state. Its status or authorizatio
 
 - **Kind:** discovery
 - **Priority:** P2
-- **Status:** proposed
+- **Status:** done
 - **Wave:** 3
 - **Authorization:** local-only
 - **Blocker:** _none_
@@ -440,10 +440,12 @@ Open GitHub report captured 2026-10-03. Reproduce against the current source and
 
 - https&colon;//github.com/nathanmcnulty/azd-maester/issues/2
 - README.md
+- docs/drift-analysis-design.md
 
 **Evidence:**
 
-- _none_
+- 2026-10-16 discovery at catalog 870cbe89dc00928935e145eb33e9799361221de0&colon; open issue &num;2 contains only a feature title. Current canonical Automation 47a1a62eedfb1d147216d7fcf1e0cd1365b66383, Container 1f34605d23e4f0536c9215d21f6368d98f5c30f4, Function 76976139f2026917484a91223ba278e9aa1fc058 and Azure DevOps 80dd3bcab64cdbf5adafd7131f5ea47b378065f6 runners do not explicitly pass DriftRoot or handle its process environment variable. The locked Maester 2.2.0 package already supplies comparison and drift tests; seven synthetic comparator cases verify documented behavior and limits, not suite, host or report execution.
+- docs/drift-analysis-design.md records explicit JSON configuration scope, default-off data-only inputs, immutable baseline approval, tenant/run/source/hash/freshness binding, input limits, upstream comparison limits, environment cleanup, privacy, optional permission deltas and canonical-host rollout gates. No host, runtime, permission or component was changed. Discovery is complete; implementation remains open in MCAT-011 and issue &num;2.
 
 **Review and authorization note:**
 
@@ -554,3 +556,57 @@ Discovery is complete but the requested provider remains unimplemented. Future h
 **Review and authorization note:**
 
 Review MCAT-010 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
+
+## MCAT-011: Coordinate optional configuration drift in canonical Maester hosts
+
+- **Kind:** feature
+- **Priority:** P2
+- **Status:** proposed
+- **Wave:** 4
+- **Authorization:** local-only
+- **Blocker:** _none_
+- **Claim:** _none_
+
+**Problem:**
+
+Upstream comparison exists, but canonical hosts do not bind approved baseline/current artifacts or explicitly integrate drift tests. MCAT-006 completed design only.
+
+**Scope:**
+
+- docs/drift-analysis-design.md
+- docs/backlog.json
+- docs/backlog.md
+- Canonical standalone host backlog handoffs; no new feature in retained catalog folders
+
+**Acceptance:**
+
+- Create bounded canonical host implementation tasks linked to issue &num;2 and this design. Reconcile open runtime/viewer branches and exact current source before editing a host.
+- Implement explicitly enabled data-only approved baseline/current artifacts with tenant/run/source/hash/freshness binding, bounded JSON/path validation, inherited-environment isolation and the documented selected-property semantics; do not add another comparator or automatic baseline capture/remediation.
+- Prove actual locked upstream suite discovery/execution, no false-green on missing/malformed/zero-case/error inputs, output privacy, report/publication failures and rollback. Keep existing default-off behavior and permission boundaries.
+- Independently qualify at least two host integrations before extracting a shared azd-reference adapter. Close coordination only with all selected canonical host task links, offline and separately authorized native execution/report-access/rollback/exact-cleanup evidence. Keep issue &num;2 open until feature acceptance is met.
+
+**Validation:**
+
+- Canonical backlog schema and JSON/Markdown parity checks.
+- PowerShell 7.6+ and Pester 6.2 synthetic fixtures plus actual upstream suite and host adapter tests as listed in docs/drift-analysis-design.md. No live collection, grant, publication or cleanup from this metadata alone.
+
+**Dependencies:**
+
+- MCAT-006
+
+**Components:**
+
+- _none_
+
+**Sources:**
+
+- docs/drift-analysis-design.md
+- https&colon;//github.com/nathanmcnulty/azd-maester/issues/2
+
+**Evidence:**
+
+- _none_
+
+**Review and authorization note:**
+
+Review MCAT-011 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
