@@ -561,11 +561,14 @@ Review MCAT-010 against the current repository state. Its status or authorizatio
 
 - **Kind:** feature
 - **Priority:** P2
-- **Status:** proposed
+- **Status:** in-progress
 - **Wave:** 4
 - **Authorization:** local-only
 - **Blocker:** _none_
-- **Claim:** _none_
+- **Claim owner:** codex-maester-drift-coordination
+- **Claim worktree:** C&colon;&bsol;azd-reconciliation-20261011&bsol;maester-custom-tests-assessment
+- **Claim base revision:** `a6e301310ccae0519288b794eb95aae3af43fa08`
+- **Claim started:** 2026-10-16T11&colon;46&colon;35.6601937+00&colon;00
 
 **Problem:**
 
@@ -602,10 +605,15 @@ Upstream comparison exists, but canonical hosts do not bind approved baseline/cu
 
 - docs/drift-analysis-design.md
 - https&colon;//github.com/nathanmcnulty/azd-maester/issues/2
+- https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/pull/30
+- https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/blob/f8510a3d27cdb328999531c7f2d6bc783413a5fa/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/blob/f8510a3d27cdb328999531c7f2d6bc783413a5fa/docs/drift-isolation.md
 
 **Evidence:**
 
-- _none_
+- 2026-10-16 actual locked Maester 2.2.0 Invoke-Maester/Pester 6.2 offline qualification executed 44 drift checks across eleven synthetic cases and generated local HTML/JSON/Markdown reports&colon; 33 passes and 11 intentional negative failures. Scalar roots and malformed settings pass upstream checks; an omitted DriftRoot reused the inherited folder; an empty root failed discovery with zero TotalCount/ErrorCount. Synthetic values appear in report details. These findings strengthen, not remove, input/privacy/positive-discovery gates.
+- Created canonical Container Apps Job tasks MCAJ-009 &lpar;default-off isolation source fix&rpar; and MCAJ-010 &lpar;approved-input adapter and live qualification&rpar;. Independently reviewed draft PR &num;30 at f8510a3d27cdb328999531c7f2d6bc783413a5fa excludes drift before discovery and restores process state. Its 72/72 offline tests include four production-bound regression cases. Actual locked-suite/production-block isolation ran exactly one ordinary test with an inherited unapproved input folder; no HTTP/authentication tripwire fired. No native job, identity, Blob publication/access, approved-input adapter or second-host qualification is claimed.
+- Coordination remains open&colon; other selected canonical host tasks/adapters, approved-input validation, performed output/privacy/failure/rollback checks, independently qualified second consumer and separately authorized native/report-access/cleanup evidence remain required. Issue &num;2 remains open.
 
 **Review and authorization note:**
 

@@ -56,6 +56,28 @@ parameter or `MAESTER_FOLDER_DRIFT` handling at these revisions:
 Recheck open runtime/authentication/viewer branches before integration. New code
 belongs in canonical hosts; retained catalog folders receive no new feature.
 
+### Later suite qualification and default-off isolation
+
+Actual offline `Invoke-Maester` qualification on PowerShell 7.6.6/Pester 6.2.0
+subsequently executed the locked 2.2.0 drift suite and generated reports. Eleven
+synthetic cases discovered 44 tests, with 33 passes and 11 intentional negative
+failures. Scalar roots and malformed settings passed all four checks, confirming
+the need for input validation. Omitting `DriftRoot` in a reused process ran the
+same 44 checks again through the inherited variable. An empty root produced a
+failed discovery container/report while TotalCount and ErrorCount were both zero;
+count fields alone cannot establish a healthy run. Synthetic changed values
+appeared in the generated JSON/Markdown details.
+
+[Container Apps Job PR #30](https://github.com/nathanmcnulty/azd-maester-containerappjob/pull/30)
+adds default-off isolation, not approved drift inputs. Its
+[source-bound qualification](https://github.com/nathanmcnulty/azd-maester-containerappjob/blob/f8510a3d27cdb328999531c7f2d6bc783413a5fa/docs/drift-isolation.md)
+records actual suite hashes, cases and limits. Using that production configuration
+and invocation block with the unchanged upstream suite and an ordinary synthetic
+test ran exactly one ordinary test, excluded drift and restored the inherited
+root. The source fix is separately reviewed and remains a draft; it does not
+prove native job execution or report publication/access. MCAJ-009 records the
+isolation fix; MCAJ-010 retains the approved-input adapter and live gates.
+
 ## First implementation contract
 
 Start with explicitly enabled, data-only local artifacts selected by an

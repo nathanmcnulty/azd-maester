@@ -383,7 +383,7 @@
       "title": "Coordinate optional configuration drift in canonical Maester hosts",
       "kind": "feature",
       "priority": "P2",
-      "status": "proposed",
+      "status": "in-progress",
       "wave": 4,
       "problem": "Upstream comparison exists, but canonical hosts do not bind approved baseline/current artifacts or explicitly integrate drift tests. MCAT-006 completed design only.",
       "scope": [
@@ -409,11 +409,23 @@
       "components": [],
       "sources": [
         "docs/drift-analysis-design.md",
-        "https://github.com/nathanmcnulty/azd-maester/issues/2"
+        "https://github.com/nathanmcnulty/azd-maester/issues/2",
+        "https://github.com/nathanmcnulty/azd-maester-containerappjob/pull/30",
+        "https://github.com/nathanmcnulty/azd-maester-containerappjob/blob/f8510a3d27cdb328999531c7f2d6bc783413a5fa/docs/backlog.json",
+        "https://github.com/nathanmcnulty/azd-maester-containerappjob/blob/f8510a3d27cdb328999531c7f2d6bc783413a5fa/docs/drift-isolation.md"
       ],
-      "evidence": [],
+      "evidence": [
+        "2026-10-16 actual locked Maester 2.2.0 Invoke-Maester/Pester 6.2 offline qualification executed 44 drift checks across eleven synthetic cases and generated local HTML/JSON/Markdown reports: 33 passes and 11 intentional negative failures. Scalar roots and malformed settings pass upstream checks; an omitted DriftRoot reused the inherited folder; an empty root failed discovery with zero TotalCount/ErrorCount. Synthetic values appear in report details. These findings strengthen, not remove, input/privacy/positive-discovery gates.",
+        "Created canonical Container Apps Job tasks MCAJ-009 (default-off isolation source fix) and MCAJ-010 (approved-input adapter and live qualification). Independently reviewed draft PR #30 at f8510a3d27cdb328999531c7f2d6bc783413a5fa excludes drift before discovery and restores process state. Its 72/72 offline tests include four production-bound regression cases. Actual locked-suite/production-block isolation ran exactly one ordinary test with an inherited unapproved input folder; no HTTP/authentication tripwire fired. No native job, identity, Blob publication/access, approved-input adapter or second-host qualification is claimed.",
+        "Coordination remains open: other selected canonical host tasks/adapters, approved-input validation, performed output/privacy/failure/rollback checks, independently qualified second consumer and separately authorized native/report-access/cleanup evidence remain required. Issue #2 remains open."
+      ],
       "blocker": null,
-      "claim": null
+      "claim": {
+        "owner": "codex-maester-drift-coordination",
+        "worktree": "C:\\azd-reconciliation-20261011\\maester-custom-tests-assessment",
+        "baseRevision": "a6e301310ccae0519288b794eb95aae3af43fa08",
+        "startedAt": "2026-10-16T11:46:35.6601937+00:00"
+      }
     }
   ]
 }
