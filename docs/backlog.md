@@ -5,7 +5,7 @@
 
 - **Schema version:** 1.0.0
 - **Repository:** nathanmcnulty/azd-maester
-- **Source revision:** `9c86e879f43de090f6fbee0fbb5f35ecbc83c374`
+- **Source revision:** `090001c61660d6522d2c5d4df6581af297015b35`
 - **Captured:** 2026-10-07
 - **Items:** 11
 
@@ -608,12 +608,16 @@ Upstream comparison exists, but canonical hosts do not bind approved baseline/cu
 - https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/pull/30
 - https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/blob/f8510a3d27cdb328999531c7f2d6bc783413a5fa/docs/backlog.json
 - https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/blob/f8510a3d27cdb328999531c7f2d6bc783413a5fa/docs/drift-isolation.md
+- https&colon;//github.com/nathanmcnulty/azd-maester-azureautomation/pull/29
+- https&colon;//github.com/nathanmcnulty/azd-maester-functionapp/pull/29
+- https&colon;//github.com/nathanmcnulty/azd-maester-azuredevops/pull/25
 
 **Evidence:**
 
 - 2026-10-16 actual locked Maester 2.2.0 Invoke-Maester/Pester 6.2 offline qualification executed 44 drift checks across eleven synthetic cases and generated local HTML/JSON/Markdown reports&colon; 33 passes and 11 intentional negative failures. Scalar roots and malformed settings pass upstream checks; an omitted DriftRoot reused the inherited folder; an empty root failed discovery with zero TotalCount/ErrorCount. Synthetic values appear in report details. These findings strengthen, not remove, input/privacy/positive-discovery gates.
 - Created canonical Container Apps Job tasks MCAJ-009 &lpar;default-off isolation source fix&rpar; and MCAJ-010 &lpar;approved-input adapter and live qualification&rpar;. Independently reviewed draft PR &num;30 at f8510a3d27cdb328999531c7f2d6bc783413a5fa excludes drift before discovery and restores process state. Its 72/72 offline tests include four production-bound regression cases. Actual locked-suite/production-block isolation ran exactly one ordinary test with an inherited unapproved input folder; no HTTP/authentication tripwire fired. No native job, identity, Blob publication/access, approved-input adapter or second-host qualification is claimed.
 - Coordination remains open&colon; other selected canonical host tasks/adapters, approved-input validation, performed output/privacy/failure/rollback checks, independently qualified second consumer and separately authorized native/report-access/cleanup evidence remain required. Issue &num;2 remains open.
+- 2026-10-16 independently reviewed source candidates extend default-off isolation to Automation f9b7c4df2eb2281fffccf26c80e69c4fc694ed39 &lpar;MAUTO-009/010&rpar;, Function b77eec4673880ba9e0df2395a2f159861fa6f279 &lpar;MFUNC-009/010&rpar; and Azure DevOps 385f613a15e640cff0b6e084440665b842b24ca6 &lpar;MADO-011/012&rpar;. Local full suites passed 79, 78 and 78 respectively on PowerShell 7.6.6/Pester 6.2.0. Each real locked-suite/production-block check executed exactly one ordinary synthetic test, excluded drift, restored inherited state and recorded no HTTP/authentication tripwire attempt. Automation viewer tasks MAUTO-006/007 were preserved from the existing pending branch; authoring baseline is MAUTO-008. This is disabled-boundary source qualification, not an approved-input adapter, shared extraction, native runtime, workload identity, publisher/access or rollback/cleanup proof.
 
 **Review and authorization note:**
 

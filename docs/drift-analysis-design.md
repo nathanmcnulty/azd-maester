@@ -78,6 +78,25 @@ root. The source fix is separately reviewed and remains a draft; it does not
 prove native job execution or report publication/access. MCAJ-009 records the
 isolation fix; MCAJ-010 retains the approved-input adapter and live gates.
 
+The same default-off boundary now has independently reviewed source candidates
+in all four canonical hosts. These are local assessment/configuration checks,
+not approved-input adapters or deployed-host qualification:
+
+| Host | Candidate PR | Immutable source | Isolation / future adapter |
+| --- | --- | --- | --- |
+| Container Apps Job | [#30](https://github.com/nathanmcnulty/azd-maester-containerappjob/pull/30) | `f8510a3d27cdb328999531c7f2d6bc783413a5fa` | MCAJ-009 / MCAJ-010 |
+| Automation | [#29](https://github.com/nathanmcnulty/azd-maester-azureautomation/pull/29) | `f9b7c4df2eb2281fffccf26c80e69c4fc694ed39` | MAUTO-009 / MAUTO-010 |
+| Function | [#29](https://github.com/nathanmcnulty/azd-maester-functionapp/pull/29) | `b77eec4673880ba9e0df2395a2f159861fa6f279` | MFUNC-009 / MFUNC-010 |
+| Azure DevOps | [#25](https://github.com/nathanmcnulty/azd-maester-azuredevops/pull/25) | `385f613a15e640cff0b6e084440665b842b24ca6` | MADO-011 / MADO-012 |
+
+Each host's production configuration/invocation blocks were exercised with the
+real locked Maester pipeline, an unchanged upstream suite copy and an ordinary
+synthetic test. Only the ordinary test ran and inherited state was restored.
+HTTP/authentication tripwires recorded no attempts; offline connection flags and
+local report outputs bounded the checks. Native runtime, workload identity,
+publisher/access and rollback/cleanup evidence stay host-owned. Qualifying this
+disabled boundary does not qualify an enabled drift adapter or justify extraction.
+
 ## First implementation contract
 
 Start with explicitly enabled, data-only local artifacts selected by an
