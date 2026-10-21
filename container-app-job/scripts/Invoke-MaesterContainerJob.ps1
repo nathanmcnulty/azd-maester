@@ -1,4 +1,5 @@
-﻿# Invoke-MaesterContainerJob.ps1
+#Requires -Version 7.6
+# Invoke-MaesterContainerJob.ps1
 # Runner script for the Container App Job. Mounted via Azure Files volume.
 # Reads configuration from environment variables set on the Container App Job.
 
@@ -164,6 +165,7 @@ foreach ($moduleName in $requiredModules) {
 foreach ($moduleName in $requiredModules) {
   Import-Module $moduleName -RequiredVersion $moduleVersions[$moduleName] -Force -ErrorAction Stop
 }
+Import-Module (Join-Path $PSScriptRoot 'Maester.AssessmentEvidence.psm1') -Force -ErrorAction Stop
 
 Connect-AzAccount -Identity -ErrorAction Stop | Out-Null
 Connect-MgGraph -Identity -NoWelcome -ErrorAction Stop | Out-Null
@@ -309,10 +311,10 @@ $tempRoot = Join-Path -Path $tempBase -ChildPath ("maester-{0}-{1}" -f (Get-Date
 New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
 
 $maesterModule = Get-Module -Name Maester -ListAvailable |
-  Where-Object { $_.Version -eq [version]'2.2.0' } |
+  Where-Object { $_.Version -eq [version]'2.3.0' } |
   Select-Object -First 1
 if (-not $maesterModule) {
-  throw 'Maester module version 2.2.0 was not found after import.'
+  throw 'Maester module version 2.3.0 was not found after import.'
 }
 
 $moduleRoot = Split-Path -Path $maesterModule.Path -Parent
@@ -340,7 +342,12 @@ if (-not $testsPath) {
 
 Write-Output "Using Maester test path: $testsPath"
 
+$junitPath = Join-Path $tempRoot 'pester-junit.xml'
 $pesterConfig = [PesterConfiguration]@{
+  Run = @{
+    ExcludePath = @((Join-Path $testsPath 'Maester/Drift/MT1060Drift.tests.ps1'))
+  }
+  TestResult = @{ Enabled = $true; OutputFormat = 'JUnitXml'; OutputPath = $junitPath; OutputEncoding = 'UTF8' }
   TestRegistry = @{
     Enabled = $false
   }
@@ -350,6 +357,10 @@ $maesterInvokeParameters = @{
   Path                = $testsPath
   OutputFolder        = $tempRoot
   NonInteractive      = $true
+  PassThru            = $true
+  OutputFolderFileName = 'assessment'
+  DisableTelemetry    = $true
+  SkipVersionCheck    = $true
   PesterConfiguration = $pesterConfig
 }
 
@@ -360,11 +371,17 @@ if (-not [string]::IsNullOrWhiteSpace($MailRecipient)) {
 }
 
 Write-Output "Running Invoke-Maester from test path '$testsPath'"
+$previousDriftRoot = [Environment]::GetEnvironmentVariable('MAESTER_FOLDER_DRIFT', 'Process')
 try {
-  Invoke-Maester @maesterInvokeParameters
+  [Environment]::SetEnvironmentVariable('MAESTER_FOLDER_DRIFT', [System.Management.Automation.Language.NullString]::Value, 'Process')
+  $maesterOutput = @(Invoke-Maester @maesterInvokeParameters)
 }
 catch {
   throw "Invoke-Maester failed: $($_.Exception.Message)"
+}
+finally {
+  $restoreDriftRoot = if ($null -eq $previousDriftRoot) { [System.Management.Automation.Language.NullString]::Value } else { $previousDriftRoot }
+  [Environment]::SetEnvironmentVariable('MAESTER_FOLDER_DRIFT', $restoreDriftRoot, 'Process')
 }
 Write-Output 'Invoke-Maester execution completed.'
 
@@ -372,15 +389,9 @@ Write-Output 'Invoke-Maester execution completed.'
 # Locate generated report
 # ──────────────────────────────────────────────
 
-$generatedHtml = Get-ChildItem -Path $tempRoot -Recurse -Filter '*.html' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if ($generatedHtml -and $generatedHtml.Length -gt 0) {
-  $outputHtmlPath = $generatedHtml.FullName
-  Write-Output "Using generated HTML report: $outputHtmlPath"
-}
-else {
-  throw 'Invoke-Maester did not generate a nonempty HTML report.'
-}
-
+$outputHtmlPath = Join-Path $tempRoot 'assessment.html'
+$assessmentEvidence = Get-MaesterAssessmentEvidence -Output $maesterOutput -JunitPath $junitPath -TestsPath $testsPath -ReportPath $outputHtmlPath -ErrorAction Stop
+Write-Output ("Assessment counts: {0}" -f ($assessmentEvidence.Counts | ConvertTo-Json -Compress))
 Write-Output "Maester run completed. Report generated successfully."
 
 # ──────────────────────────────────────────────

@@ -468,7 +468,7 @@ $storageKeyPath = "/subscriptions/$SubscriptionId/resourceGroups/$resolvedResour
 $storageKeysResponse = Invoke-RestMethod -Method POST -Uri "https://management.azure.com$storageKeyPath" -Headers $armHeaders -Body '{}' -ContentType 'application/json'
 $storageKey = $storageKeysResponse.keys[0].value
 
-foreach ($file in @('Invoke-MaesterContainerJob.ps1', 'Install-LockedModules.ps1', 'runtime-packages.lock.json')) {
+foreach ($file in @('Invoke-MaesterContainerJob.ps1', 'Maester.AssessmentEvidence.psm1', 'Install-LockedModules.ps1', 'runtime-packages.lock.json')) {
   $sourcePath = if ($file -like '*.json') { Join-Path (Split-Path $PSScriptRoot -Parent) $file } else { Join-Path $PSScriptRoot $file }
   if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw "Required runner file was not found: $sourcePath" }
   & az storage file upload `

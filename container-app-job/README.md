@@ -160,3 +160,5 @@ This solution is reasonably secure, but there are additional controls you may ch
 - Azure Container Apps Jobs: https://learn.microsoft.com/azure/container-apps/jobs
 - Azure Container Apps storage: https://learn.microsoft.com/azure/container-apps/storage-mounts
 - App Service custom domain: https://learn.microsoft.com/azure/app-service/app-service-web-tutorial-custom-domain
+
+The retained assessment runner pins Maester 2.3.0 and requires PowerShell 7.6. Its old image/Files delivery is not yet qualified for this host requirement; do not deploy this partial migration. See ../docs/retained-maester-230-migration.md for remaining host, consent and native gates.

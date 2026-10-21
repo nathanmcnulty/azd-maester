@@ -69,9 +69,11 @@
       "path": "container-app-job/runtime-packages.lock.json",
       "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
       "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
-      "sha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
+      "sha256": "581F9FEE92A73FF7A5897BC276441654538057983DC74FE8A517CC371D1A6705",
       "sourceSha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "previousMaintainedSha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
+      "legacyReason": "Retained Container assessment slice upgrades only the pinned Maester package and structured result/JUnit/report boundary, disables drift discovery, and delivers the local gate module through existing Files publication. Host, consent, lifecycle receipts and keyless migration remain separate; retained topology/access/schedule behavior is preserved."
     },
     {
       "path": "container-app-job/scripts/Install-LockedModules.ps1",
@@ -93,18 +95,27 @@
       "path": "container-app-job/scripts/Invoke-MaesterContainerJob.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
       "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
-      "sha256": "A8C3E65384D71B55E843CBF39C16F87680A960364FABA2B95CDC2255436ADD73",
+      "sha256": "4AFD33EBC7DDEA4FC1B52A0EDF3BC61AA28BD70E2BF0D38BED25AE9F6E92A360",
       "sourceSha256": "A8C3E65384D71B55E843CBF39C16F87680A960364FABA2B95CDC2255436ADD73",
-      "sourceMatch": true
+      "sourceMatch": false,
+      "previousMaintainedSha256": "A8C3E65384D71B55E843CBF39C16F87680A960364FABA2B95CDC2255436ADD73",
+      "legacyReason": "Retained Container assessment slice upgrades only the pinned Maester package and structured result/JUnit/report boundary, disables drift discovery, and delivers the local gate module through existing Files publication. Host, consent, lifecycle receipts and keyless migration remain separate; retained topology/access/schedule behavior is preserved.",
+      "adoptedRuntimeContract": {
+        "sourceCommit": "939b52eb0299ddb7171b1aaf4fb26d8c0a306af7",
+        "sourcePath": "scripts/Invoke-MaesterContainerJob.ps1",
+        "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
+        "scope": "Maester2.3 structured result/JUnit/report invocation and default-off drift only; not whole-file copy, execution-bound receipts, approved drift or host/consent/keyless migration."
+      }
     },
     {
       "path": "container-app-job/scripts/Setup-PostDeploy.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-containerappjob",
       "sourceCommit": "6aa18dcd359f1f175485f87082cc70cbd2816e79",
-      "sha256": "5403762BDA2609A78E15F85793660EE874D832E357CB38DF6C4B95AB9329ECFE",
+      "sha256": "4E3A4A828C2325D3D786E9A0843F51286CF032656E3D2DE80025D89FCB9EAE25",
       "sourceSha256": "2A175ACE3B7454110BFE2BC40C61167AF2B7264F18550D67AEC35970065F17BD",
       "sourceMatch": false,
-      "legacyReason": "Legacy setup preserves stable job naming and verifies exact storage and optional Web App identities before role or Easy Auth changes."
+      "legacyReason": "Retained Container assessment slice upgrades only the pinned Maester package and structured result/JUnit/report boundary, disables drift discovery, and delivers the local gate module through existing Files publication. Host, consent, lifecycle receipts and keyless migration remain separate; retained topology/access/schedule behavior is preserved.",
+      "previousMaintainedSha256": "5403762BDA2609A78E15F85793660EE874D832E357CB38DF6C4B95AB9329ECFE"
     },
     {
       "path": "azure-devops/infra/main.bicep",
@@ -327,6 +338,14 @@
     },
     {
       "path": "function-app/src/Maester.AssessmentEvidence.psm1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "a3f9bc84c9b7551d34734d2a632aa5ea14d19fe2",
+      "sha256": "EFA333C18D2A98100C0904F7255B75D165AB6A446F4537230693BAC870AC7994",
+      "sourceSha256": "EFA333C18D2A98100C0904F7255B75D165AB6A446F4537230693BAC870AC7994",
+      "sourceMatch": true
+    },
+    {
+      "path": "container-app-job/scripts/Maester.AssessmentEvidence.psm1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
       "sourceCommit": "a3f9bc84c9b7551d34734d2a632aa5ea14d19fe2",
       "sha256": "EFA333C18D2A98100C0904F7255B75D165AB6A446F4537230693BAC870AC7994",
