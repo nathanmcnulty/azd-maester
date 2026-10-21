@@ -1,6 +1,6 @@
 Describe 'Legacy <Name> runner result boundary' -ForEach @(
   @{ Name = 'Automation'; RunnerPath = 'automation-account/scripts/Invoke-MaesterAutomationRunbook.ps1'; Invocation = 'Write-Output'; StrictAssessment = $true }
-  @{ Name = 'Container Job'; RunnerPath = 'container-app-job/scripts/Invoke-MaesterContainerJob.ps1'; Invocation = 'Write-Output'; StrictAssessment = $false }
+  @{ Name = 'Container Job'; RunnerPath = 'container-app-job/scripts/Invoke-MaesterContainerJob.ps1'; Invocation = 'Write-Output'; StrictAssessment = $true }
   @{ Name = 'Function App'; RunnerPath = 'function-app/src/MaesterTimerTrigger/run.ps1'; Invocation = 'Write-Step'; StrictAssessment = $true }
 ) {
   AfterAll {
@@ -41,12 +41,13 @@ $DashboardContainer = 'latest'
 function Write-Step { param([string] $Message) }
 function Invoke-Maester {
   if ($env:RUNNER_TEST_MODE -eq 'throw') { throw 'simulated execution failure' }
-  if ($env:RUNNER_TEST_MODE -eq 'result') {
+  if ($env:RUNNER_TEST_MODE -in @('result','invalid-counts')) {
     $name = if ($strictAssessment) { 'assessment.html' } else { 'report.html' }
     Set-Content -LiteralPath (Join-Path $tempRoot $name) -Value '<html>security finding</html>'
     if ($strictAssessment) {
       Set-Content $junitPath '<testsuites tests="5" errors="0" failures="1" disabled="3" />'
       $result = New-TestAssessmentResult $testsPath
+      if ($env:RUNNER_TEST_MODE -eq 'invalid-counts') { $result.TotalCount = 999 }
       $result | Add-Member OutputFiles ([pscustomobject]@{ OutputHtmlFile = (Join-Path $tempRoot 'assessment.html') })
       return $result
     }
@@ -78,6 +79,19 @@ function Set-BlobContent {
     @(Get-ChildItem -LiteralPath $env:RUNNER_TEST_TEMP_ROOT -Filter '*.html').Count | Should -Be 0
   }
 
+  It 'rejects malformed structured results before publishing an existing HTML report' {
+    $env:RUNNER_TEST_TEMP_ROOT = Join-Path $TestDrive 'invalid-counts'
+    $env:RUNNER_TEST_MODE = 'invalid-counts'
+    $env:RUNNER_TEST_STORAGE = 'fixture'
+    $env:RUNNER_TEST_FAIL_UPLOAD = '0'
+    New-Item -ItemType Directory -Path $env:RUNNER_TEST_TEMP_ROOT | Out-Null
+    $output = & pwsh -NoProfile -File $harnessPath 2>&1
+    $LASTEXITCODE | Should -Be 1
+    @($output) -join "`n" | Should -Match 'countMismatch'
+    @($output) -join "`n" | Should -Not -Match 'RUNNER_SUCCESS'
+    Test-Path -LiteralPath (Join-Path $env:RUNNER_TEST_TEMP_ROOT 'assessment.html') | Should -BeTrue
+    Test-Path -LiteralPath (Join-Path $env:RUNNER_TEST_TEMP_ROOT 'latest-attempted') | Should -BeFalse
+  }
   It 'exits nonzero when Maester produces no report' {
     $env:RUNNER_TEST_TEMP_ROOT = Join-Path $TestDrive 'missing'
     $env:RUNNER_TEST_MODE = 'missing'

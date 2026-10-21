@@ -1,4 +1,4 @@
-# Retained Maester 2.3 migration: Function and Automation runtime slices
+# Retained Maester 2.3 migration: assessment runtime slices
 
 These are bounded source slices of issue #41, not completion of the
 four-host or reviewed-consent migration. New deployments still belong in the
@@ -40,8 +40,8 @@ no permission and creates no new resource or schedule.
 
 ## Remaining acceptance
 
-- Migrate the retained Container Job and Azure DevOps runtimes with
-  their own dependency reconciliation; do not copy unrelated enabled-drift code.
+- Complete the retained Container host/delivery migration and migrate Azure DevOps
+  with their own dependency reconciliation; do not copy unrelated enabled-drift code.
 - Adopt reviewed hook/coordinator consent in all four hosts and `shared/scripts`.
   The existing retained hooks and their Extended/default permission behavior are
   unchanged by this runtime-only slice. Do not infer consent readiness from a
@@ -91,3 +91,28 @@ passing offline tests is not end-to-end job-bound assessment verification.
 Reviewed setup-consent, runtime-only validation modes, new failure diagnostics,
 and native host acceptance remain separate work. Existing configured inline mail
 behavior remains opt-in through its prior setting; delivery is not proven.
+
+## Container assessment follow-through
+
+The retained Container runner now pins the reviewed Maester 2.3.0 package and
+uses the same exact pure assessment gate as the reviewed retained Function copy
+(original standalone Function a3f9bc84c9b7551d34734d2a632aa5ea14d19fe2).
+The invocation follows standalone Container #52 at
+939b52eb0299ddb7171b1aaf4fb26d8c0a306af7: structured output, JUnit, exact
+assessment.html binding, core-test execution and classified failures. A genuine
+policy finding is accepted; invalid/incomplete execution is rejected before
+report storage publication. Drift is excluded before discovery and inherited
+MAESTER_FOLDER_DRIFT is cleared only during invocation and restored in finally.
+The existing Azure Files publication now includes the required gate module for
+both cached-image and no-ACR paths. Only Maester changes in the package lock.
+
+This is an assessment slice, not a complete Container host migration. The old
+image/delivery design is retained and is not qualified for PowerShell 7.6; the
+runner now fails closed on older engines. Reconcile the standalone reviewed
+7.6.6 image/bootstrap and keyless bundle stack before deployment. Do not deploy
+this slice over the retained scheduled environment. Its deployed source is
+unknown and its Azure Files/Shared Key configuration differs from standalone
+#56. Setup consent, execution-bound receipts, runtime-only validation, native
+image/identity access, report freshness/publication, lifecycle/cancellation and
+owned cleanup remain open. Azure DevOps migration also remains open. No
+identity, role, topology, schedule, network or Azure resource change is made.
