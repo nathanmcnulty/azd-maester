@@ -14,12 +14,17 @@ byte integrity, not publisher authentication.
 Versions were observed in the succeeded `PowerShell-74-Maester` runtime package
 resources in the selected lab on 2026-10-03. Package hashes were then computed
 from `https://www.powershellgallery.com/api/v2/package/<name>/<version>` on the
-same date. No Maester or Graph runbook execution was performed for this lock.
+same date. That historical inventory included Maester 2.2.0, not the newly adopted
+2.3.0 package. No Maester or Graph runbook execution was performed for that historical lock.
+
+The retained source now adopts reviewed Maester 2.3.0 package bytes from the
+standalone migration. Its local offline compatibility evidence is separate from
+those October 3 observations and does not establish current Azure execution.
 
 | Package | Exact version | SHA-256 of `.nupkg` |
 | --- | --- | --- |
 | Az.Accounts | 5.5.3 | `5A8BE006E80A7CA66134DF1F28E0EAD93EF4BC437685B647B6720583CB58E615` |
-| Maester | 2.2.0 | `8C8A9757771177BD89785262E6B38385CF5E5C19BB799E4399E77F6439AD699C` |
+| Maester | 2.3.0 | `95F720822D04271F5E15F4665BC017111DC72E17B97E5D0525CB4EC2FF5BD0B0` |
 | Pester | 6.2.0 | `E6AC7418D4F12500269AACA58AE56CF1CAAFBBF1AFA2CEC334E289D1CF50A239` |
 | NuGet | 1.3.3 | `FCF1A37925C235159AB1C23249F016E65456EA3A36D0EA42DB85F4F15BF7C033` |
 | PackageManagement | 1.4.8.1 | `7E1F8A75B6BC8A83D8ABFF79F6690FC1DFBD534FD3E5733D97E19BCB5954C13E` |
@@ -34,8 +39,8 @@ the new exact package bytes, updating the URI and hash together, and validating
 the resulting runtime before promotion.
 
 Infrastructure seeds the Automation runbook from Maester commit
-`c657a4b8a24267ccd795edb0c7db402e0d440e3b` with SHA-256
-`FF70CB4AB2F32ADA6C5FF5121931D3C8BE45BDBCDB746970C26FB275FFAD312F`.
+`7413c42d3fcc724dfea94d2726e690ddd364d914` with SHA-256
+`87CEB74D50309360C592816BFC963A6D370B66C51AE71D45A01117651BF7F5A8`.
 This seed is not attached to the weekly schedule. Postprovision publishes the
 local runbook, confirms its published content, and only then creates the weekly
 job-schedule association. If setup or publication fails, no recurring run is

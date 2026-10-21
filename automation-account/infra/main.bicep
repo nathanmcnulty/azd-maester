@@ -290,8 +290,8 @@ resource runtimePackageMaester 'Microsoft.Automation/automationAccounts/runtimeE
   parent: runtime76
   properties: {
     contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/Maester/2.2.0'
-      contentHash: { algorithm: 'sha256', value: '8C8A9757771177BD89785262E6B38385CF5E5C19BB799E4399E77F6439AD699C' }
+      uri: 'https://www.powershellgallery.com/api/v2/package/Maester/2.3.0'
+      contentHash: { algorithm: 'sha256', value: '95F720822D04271F5E15F4665BC017111DC72E17B97E5D0525CB4EC2FF5BD0B0' }
     }
   }
 }
@@ -383,8 +383,8 @@ resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2024-10-23' =
     logVerbose: false
     description: 'Runbook to execute Maester report workflow'
     publishContentLink: {
-      uri: 'https://raw.githubusercontent.com/maester365/maester/c657a4b8a24267ccd795edb0c7db402e0d440e3b/powershell/public/Invoke-Maester.ps1'
-      contentHash: { algorithm: 'sha256', value: 'FF70CB4AB2F32ADA6C5FF5121931D3C8BE45BDBCDB746970C26FB275FFAD312F' }
+      uri: 'https://raw.githubusercontent.com/maester365/maester/7413c42d3fcc724dfea94d2726e690ddd364d914/powershell/public/Invoke-Maester.ps1'
+      contentHash: { algorithm: 'sha256', value: '87CEB74D50309360C592816BFC963A6D370B66C51AE71D45A01117651BF7F5A8' }
     }
     runtimeEnvironment: runtime76.name
   }

@@ -6,19 +6,29 @@
       "path": "automation-account/infra/main.bicep",
       "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
       "sourceCommit": "285a280b633ca77886bb0757478576e26c04914b",
-      "sha256": "203F98C696EA7AD90E8D513539ADAF1F708793B94D795955CA8671977DAB8B42",
+      "sha256": "8F3F2730D5B89B69B75C913A7E07B683B11B6D24F54EEA65C3E7EC67FFAC2977",
       "sourceSha256": "782092D7DBD950DD2D58FE125B5F93002E0597A9DD6C2FDD28242997BDD17F15",
       "sourceMatch": false,
-      "legacyReason": "Maintained Automation infrastructure uses PowerShell 7.6 with explicit storage and optional Web App binding outputs."
+      "legacyReason": "Maintained Automation infrastructure uses PowerShell 7.6 with explicit storage and optional Web App binding outputs. Retained 2.3.0 runtime slice adopts exact reviewed package pin and pure assessment/invocation boundary while preserving catalog topology, setup, validation and publication behavior.",
+      "previousMaintainedSha256": "203F98C696EA7AD90E8D513539ADAF1F708793B94D795955CA8671977DAB8B42"
     },
     {
       "path": "automation-account/scripts/Invoke-MaesterAutomationRunbook.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
       "sourceCommit": "285a280b633ca77886bb0757478576e26c04914b",
-      "sha256": "4C9DD7CBB6817B97726A8EFAFEA2FA74FD7E66ADF106822551ABC12112AEE336",
+      "sha256": "A25365335A0FD06C58B8E494AC7C53461F6CDE483A63DF4D3A9E2B7E2F1B0C3F",
       "sourceSha256": "D8ABDA98F528975704EC7731CC58924879865E282B1A193B5908131D1B322D58",
       "sourceMatch": false,
-      "legacyReason": "Maintained copy requires PowerShell 7.6."
+      "legacyReason": "Maintained copy requires PowerShell 7.6. Retained 2.3.0 runtime slice adopts exact reviewed package pin and pure assessment/invocation boundary while preserving catalog topology, setup, validation and publication behavior.",
+      "previousMaintainedSha256": "4C9DD7CBB6817B97726A8EFAFEA2FA74FD7E66ADF106822551ABC12112AEE336",
+      "adoptedRuntimeContract": {
+        "sourceRepository": "nathanmcnulty/azd-maester-azureautomation",
+        "sourceCommit": "0385b7973435a75922f9ad93b7ac8e053092d2a2",
+        "sourcePath": "scripts/Invoke-MaesterAutomationRunbook.ps1",
+        "sourceSha256": "CD683BE1546B2B4BA3E307CD62F556E0E1F3931DCE3E0DCC771B70EE64304B4F",
+        "scope": "Pure assessment contract and strict invocation configuration/boundary only; not an exact whole-file copy. Blob date header follows reviewed PR50.",
+        "assessmentBlockSha256": "0E8A47AEA96EAE1601D9E79D099D0ADB14DB5AEF4E1754F22448CF4CC4448B7F"
+      }
     },
     {
       "path": "automation-account/scripts/Invoke-RunbookValidation.ps1",
@@ -175,10 +185,17 @@
     {
       "path": "function-app/runtime-packages.lock.json",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
-      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
-      "sourceSha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
-      "sourceMatch": true
+      "sourceCommit": "a3f9bc84c9b7551d34734d2a632aa5ea14d19fe2",
+      "sha256": "581F9FEE92A73FF7A5897BC276441654538057983DC74FE8A517CC371D1A6705",
+      "sourceSha256": "581F9FEE92A73FF7A5897BC276441654538057983DC74FE8A517CC371D1A6705",
+      "sourceMatch": true,
+      "previousSource": {
+        "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+        "sourceSha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
+        "sha256": "44ABDE8C67B92536B75DBB9E2B341838B6A6B842B898CC57BE162FBC8E229F4A",
+        "sourceMatch": true,
+        "reason": "Retained pre-2.3 provenance; replaced by exact reviewed Function runtime copy."
+      }
     },
     {
       "path": "function-app/scripts/Install-LockedModules.ps1",
@@ -261,11 +278,17 @@
     {
       "path": "function-app/src/MaesterTimerTrigger/run.ps1",
       "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
-      "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
-      "sha256": "ED735A3893E19641EDEFAA44D89CD4D3BC601CA7BB1C7CEEAEEEB609CBF5D70D",
-      "sourceSha256": "167B0F527AECA4631CE41533DFECE8D0677D9C1E710B75D7521147AC921E25F2",
-      "sourceMatch": false,
-      "legacyReason": "Maintained copy requires PowerShell 7.6."
+      "sourceCommit": "a3f9bc84c9b7551d34734d2a632aa5ea14d19fe2",
+      "sha256": "8085F231AFD7C4792473BBAF38B3A375ACDF724549ADBDB57F181271C5D87A50",
+      "sourceSha256": "8085F231AFD7C4792473BBAF38B3A375ACDF724549ADBDB57F181271C5D87A50",
+      "sourceMatch": true,
+      "previousSource": {
+        "sourceCommit": "60fb5c3bdf29af26d207cad936323b71948743d8",
+        "sourceSha256": "167B0F527AECA4631CE41533DFECE8D0677D9C1E710B75D7521147AC921E25F2",
+        "sha256": "ED735A3893E19641EDEFAA44D89CD4D3BC601CA7BB1C7CEEAEEEB609CBF5D70D",
+        "sourceMatch": false,
+        "reason": "Retained pre-2.3 provenance; replaced by exact reviewed Function runtime copy."
+      }
     },
     {
       "path": "function-app/src/MaesterValidationTrigger/function.json",
@@ -301,6 +324,14 @@
       "sourceSha256": "3FF129519763EEC53AC8496E1ECF4B42085F91CC7327D23655C5B9A063957F18",
       "sourceMatch": false,
       "legacyReason": "Maintained copy requires PowerShell 7.6."
+    },
+    {
+      "path": "function-app/src/Maester.AssessmentEvidence.psm1",
+      "sourceRepository": "nathanmcnulty/azd-maester-functionapp",
+      "sourceCommit": "a3f9bc84c9b7551d34734d2a632aa5ea14d19fe2",
+      "sha256": "EFA333C18D2A98100C0904F7255B75D165AB6A446F4537230693BAC870AC7994",
+      "sourceSha256": "EFA333C18D2A98100C0904F7255B75D165AB6A446F4537230693BAC870AC7994",
+      "sourceMatch": true
     }
   ],
   "localFiles": [

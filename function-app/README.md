@@ -151,3 +151,10 @@ This solution is reasonably secure, but there are additional controls you may ch
 - Azure Functions PowerShell guide: https://learn.microsoft.com/azure/azure-functions/functions-reference-powershell
 - Azure Functions managed dependencies: https://learn.microsoft.com/azure/azure-functions/functions-reference-powershell#dependency-management
 - App Service custom domain: https://learn.microsoft.com/azure/app-service/app-service-web-tutorial-custom-domain
+
+## Retained runtime migration
+
+This retained Function copy pins Maester 2.3.0 with strict assessment/report
+evidence checks. It does not yet adopt the reviewed setup-consent flow; see the
+[catalog migration record](../docs/retained-maester-230-migration.md) for scope,
+source provenance and native acceptance still required.
