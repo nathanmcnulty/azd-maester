@@ -5,9 +5,9 @@
 
 - **Schema version:** 1.0.0
 - **Repository:** nathanmcnulty/azd-maester
-- **Source revision:** `9c86e879f43de090f6fbee0fbb5f35ecbc83c374`
+- **Source revision:** `090001c61660d6522d2c5d4df6581af297015b35`
 - **Captured:** 2026-10-07
-- **Items:** 10
+- **Items:** 12
 
 ## MCAT-001: Reconcile this backlog with current source and active work
 
@@ -401,7 +401,7 @@ Review MCAT-005 against the current repository state. Its status or authorizatio
 
 - **Kind:** discovery
 - **Priority:** P2
-- **Status:** proposed
+- **Status:** done
 - **Wave:** 3
 - **Authorization:** local-only
 - **Blocker:** _none_
@@ -440,14 +440,82 @@ Open GitHub report captured 2026-10-03. Reproduce against the current source and
 
 - https&colon;//github.com/nathanmcnulty/azd-maester/issues/2
 - README.md
+- docs/drift-analysis-design.md
 
 **Evidence:**
 
-- _none_
+- 2026-10-16 discovery at catalog 870cbe89dc00928935e145eb33e9799361221de0&colon; open issue &num;2 contains only a feature title. Current canonical Automation 47a1a62eedfb1d147216d7fcf1e0cd1365b66383, Container 1f34605d23e4f0536c9215d21f6368d98f5c30f4, Function 76976139f2026917484a91223ba278e9aa1fc058 and Azure DevOps 80dd3bcab64cdbf5adafd7131f5ea47b378065f6 runners do not explicitly pass DriftRoot or handle its process environment variable. The locked Maester 2.2.0 package already supplies comparison and drift tests; seven synthetic comparator cases verify documented behavior and limits, not suite, host or report execution.
+- docs/drift-analysis-design.md records explicit JSON configuration scope, default-off data-only inputs, immutable baseline approval, tenant/run/source/hash/freshness binding, input limits, upstream comparison limits, environment cleanup, privacy, optional permission deltas and canonical-host rollout gates. No host, runtime, permission or component was changed. Discovery is complete; implementation remains open in MCAT-011 and issue &num;2.
 
 **Review and authorization note:**
 
 Review MCAT-006 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
+
+## MCAT-012: Adopt Maester 2.3 and reviewed consent in retained migration copies
+
+- **Kind:** maintenance
+- **Priority:** P1
+- **Status:** in-progress
+- **Wave:** 4
+- **Authorization:** local-only
+- **Blocker:** _none_
+- **Claim owner:** codex-retained-function-runtime
+- **Claim worktree:** maester-catalog-41
+- **Claim base revision:** `90022774c64a2bd015ba271bd4976dd89aa3c805`
+- **Claim started:** 10/21/2026 05&colon;04&colon;01
+
+**Problem:**
+
+Standalone reviewed drafts do not update the four retained host copies or shared hook copy. Existing catalog runtime and drift drafts must be preserved.
+
+**Scope:**
+
+- automation-account
+- container-app-job
+- function-app
+- azure-devops
+- shared/scripts
+- runtime-contracts.lock.json
+- docs/retained-maester-230-migration.md
+
+**Acceptance:**
+
+- Reconcile catalog drafts &num;39 and &num;40 without discarding runtime, drift or provenance evidence.
+- Adopt reviewed Maester 2.3 package hashes and strict assessment/report evidence in each retained runner without copying unrelated standalone infrastructure or enabled features.
+- Synchronize reviewed hooks/coordinator and shared/scripts; adopt Full/Minimal and separate default-off mail/privacy capabilities with exact Process-scoped reviewed setup consent.
+- Preserve target, schedule, receipt, managed identity and federated-runtime boundaries; complete independent exact-tree and registered offline checks.
+- Keep native deployment, authentication, effective-access, report access, rollback and cleanup acceptance separate; do not close issue &num;41 for this Function-only slice.
+
+**Validation:**
+
+- Registered root and all-host Pester 6.2.0 suites on PowerShell 7.6; pinned Bicep 0.46.1 compilation and parser checks.
+- Real locked Maester 2.3 compatibility harness per changed runner with synthetic inputs and network tripwires.
+- Current runtime-contract hash checks and explicit historical source preservation.
+
+**Dependencies:**
+
+- _none_
+
+**Components:**
+
+- _none_
+
+**Sources:**
+
+- https&colon;//github.com/nathanmcnulty/azd-maester/issues/41
+- https&colon;//github.com/nathanmcnulty/azd-maester/pull/39
+- https&colon;//github.com/nathanmcnulty/azd-maester/pull/40
+- https&colon;//github.com/nathanmcnulty/azd-maester-functionapp/pull/44
+- docs/retained-maester-230-migration.md
+
+**Evidence:**
+
+- 2026-10-21 source slice reconciles &num;39 ac43ace6c30f7a77d0a02bd7b1e207564eee3054 and &num;40 a5003aecf892186efcb47cd7489495b2d0783fc0. Function runtime, package lock and assessment gate reuse exact &num;44 a3f9bc84c9b7551d34734d2a632aa5ea14d19fe2 bytes; other host runtimes, setup-consent hooks and shared/scripts remain unchanged. This is not native readiness or complete issue acceptance.
+- 2026-10-21 second source slice adopts reviewed Automation 2.3 package/seed pins and embedded strict assessment/invocation gate while preserving catalog topology, schedule ownership and validation interface. Real-package qualification retains six synthetic modes and zero-transport tripwires. Container Job, Azure DevOps and all setup-consent migration remain open; the existing Automation validator is status/stream-based, not job-content-bound assessment proof.
+
+**Review and authorization note:**
+
+Review MCAT-012 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
 
 ## MCAT-009: Coordinate Caddy viewer delivery in canonical Maester hosts
 
@@ -554,3 +622,69 @@ Discovery is complete but the requested provider remains unimplemented. Future h
 **Review and authorization note:**
 
 Review MCAT-010 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
+
+## MCAT-011: Coordinate optional configuration drift in canonical Maester hosts
+
+- **Kind:** feature
+- **Priority:** P2
+- **Status:** in-progress
+- **Wave:** 4
+- **Authorization:** local-only
+- **Blocker:** _none_
+- **Claim owner:** codex-maester-drift-coordination
+- **Claim worktree:** C&colon;&bsol;azd-reconciliation-20261011&bsol;maester-custom-tests-assessment
+- **Claim base revision:** `a6e301310ccae0519288b794eb95aae3af43fa08`
+- **Claim started:** 10/16/2026 03&colon;46&colon;35
+
+**Problem:**
+
+Upstream comparison exists, but canonical hosts do not bind approved baseline/current artifacts or explicitly integrate drift tests. MCAT-006 completed design only.
+
+**Scope:**
+
+- docs/drift-analysis-design.md
+- docs/backlog.json
+- docs/backlog.md
+- Canonical standalone host backlog handoffs; no new feature in retained catalog folders
+
+**Acceptance:**
+
+- Create bounded canonical host implementation tasks linked to issue &num;2 and this design. Reconcile open runtime/viewer branches and exact current source before editing a host.
+- Implement explicitly enabled data-only approved baseline/current artifacts with tenant/run/source/hash/freshness binding, bounded JSON/path validation, inherited-environment isolation and the documented selected-property semantics; do not add another comparator or automatic baseline capture/remediation.
+- Prove actual locked upstream suite discovery/execution, no false-green on missing/malformed/zero-case/error inputs, output privacy, report/publication failures and rollback. Keep existing default-off behavior and permission boundaries.
+- Independently qualify at least two host integrations before extracting a shared azd-reference adapter. Close coordination only with all selected canonical host task links, offline and separately authorized native execution/report-access/rollback/exact-cleanup evidence. Keep issue &num;2 open until feature acceptance is met.
+
+**Validation:**
+
+- Canonical backlog schema and JSON/Markdown parity checks.
+- PowerShell 7.6+ and Pester 6.2 synthetic fixtures plus actual upstream suite and host adapter tests as listed in docs/drift-analysis-design.md. No live collection, grant, publication or cleanup from this metadata alone.
+
+**Dependencies:**
+
+- MCAT-006
+
+**Components:**
+
+- _none_
+
+**Sources:**
+
+- docs/drift-analysis-design.md
+- https&colon;//github.com/nathanmcnulty/azd-maester/issues/2
+- https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/pull/30
+- https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/blob/f8510a3d27cdb328999531c7f2d6bc783413a5fa/docs/backlog.json
+- https&colon;//github.com/nathanmcnulty/azd-maester-containerappjob/blob/f8510a3d27cdb328999531c7f2d6bc783413a5fa/docs/drift-isolation.md
+- https&colon;//github.com/nathanmcnulty/azd-maester-azureautomation/pull/29
+- https&colon;//github.com/nathanmcnulty/azd-maester-functionapp/pull/29
+- https&colon;//github.com/nathanmcnulty/azd-maester-azuredevops/pull/25
+
+**Evidence:**
+
+- 2026-10-16 actual locked Maester 2.2.0 Invoke-Maester/Pester 6.2 offline qualification executed 44 drift checks across eleven synthetic cases and generated local HTML/JSON/Markdown reports&colon; 33 passes and 11 intentional negative failures. Scalar roots and malformed settings pass upstream checks; an omitted DriftRoot reused the inherited folder; an empty root failed discovery with zero TotalCount/ErrorCount. Synthetic values appear in report details. These findings strengthen, not remove, input/privacy/positive-discovery gates.
+- Created canonical Container Apps Job tasks MCAJ-009 &lpar;default-off isolation source fix&rpar; and MCAJ-010 &lpar;approved-input adapter and live qualification&rpar;. Independently reviewed draft PR &num;30 at f8510a3d27cdb328999531c7f2d6bc783413a5fa excludes drift before discovery and restores process state. Its 72/72 offline tests include four production-bound regression cases. Actual locked-suite/production-block isolation ran exactly one ordinary test with an inherited unapproved input folder; no HTTP/authentication tripwire fired. No native job, identity, Blob publication/access, approved-input adapter or second-host qualification is claimed.
+- Coordination remains open&colon; other selected canonical host tasks/adapters, approved-input validation, performed output/privacy/failure/rollback checks, independently qualified second consumer and separately authorized native/report-access/cleanup evidence remain required. Issue &num;2 remains open.
+- 2026-10-16 independently reviewed source candidates extend default-off isolation to Automation f9b7c4df2eb2281fffccf26c80e69c4fc694ed39 &lpar;MAUTO-009/010&rpar;, Function b77eec4673880ba9e0df2395a2f159861fa6f279 &lpar;MFUNC-009/010&rpar; and Azure DevOps 385f613a15e640cff0b6e084440665b842b24ca6 &lpar;MADO-011/012&rpar;. Local full suites passed 79, 78 and 78 respectively on PowerShell 7.6.6/Pester 6.2.0. Each real locked-suite/production-block check executed exactly one ordinary synthetic test, excluded drift, restored inherited state and recorded no HTTP/authentication tripwire attempt. Automation viewer tasks MAUTO-006/007 were preserved from the existing pending branch; authoring baseline is MAUTO-008. This is disabled-boundary source qualification, not an approved-input adapter, shared extraction, native runtime, workload identity, publisher/access or rollback/cleanup proof.
+
+**Review and authorization note:**
+
+Review MCAT-011 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.

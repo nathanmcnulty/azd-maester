@@ -27,7 +27,7 @@ function az {
   }
 
   It 'rejects tampered package bytes before zip deployment on <Plan>' -ForEach @(
-    @{ Plan = 'FC1' }, @{ Plan = 'Y1' }, @{ Plan = 'B1' }
+    @{ Plan = 'FC1' }, @{ Plan = 'B1' }
   ) {
       $env:RUNNER_TEST_TEMP_ROOT = Join-Path $TestDrive "tamper-$Plan"
       $env:RUNNER_TEST_PLAN = $Plan

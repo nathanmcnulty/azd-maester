@@ -1,3 +1,4 @@
+#Requires -Version 7.6
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $false)]
@@ -35,7 +36,7 @@ param(
   [string[]]$AzureScopes,
 
   [Parameter(Mandatory = $false)]
-  [ValidateSet('FC1', 'B1', 'Y1')]
+  [ValidateSet('FC1', 'B1')]
   [string]$Plan
 )
 

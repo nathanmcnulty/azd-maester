@@ -1,3 +1,4 @@
+#Requires -Version 7.6
 function Test-MaesterGuid {
   param([string]$Value)
   $parsed = [guid]::Empty

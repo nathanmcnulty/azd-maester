@@ -3,7 +3,7 @@ Describe 'Automation runtime package reproducibility' {
     $bicepLines = Get-Content (Join-Path $PSScriptRoot '..\infra\main.bicep')
     $expected = @{
       'Az.Accounts' = '5.5.3'
-      'Maester' = '2.2.0'
+      'Maester' = '2.3.0'
       'Pester' = '6.2.0'
       'NuGet' = '1.3.3'
       'PackageManagement' = '1.4.8.1'

@@ -2,12 +2,14 @@
 
 Deploys a production-style Maester automation solution on Azure with:
 
-- Azure Automation (PowerShell 7.4 runtime)
+- Azure Automation (PowerShell 7.6 runtime)
 - Managed identity + Graph permissions
 - Storage-backed report history (`archive`) and latest pointer (`latest/latest.html`)
 - Optional App Service + Easy Auth portal in WebApp mode
 
 ## Quickstart (recommended)
+
+Requires PowerShell 7.6 or later. Offline repository tests use Pester 6.2 or later.
 
 After `azd init -t <your-template-id>` and `cd automation-account`, initiate the login:    
 Login to the azd module: `azd auth login`    
@@ -137,3 +139,11 @@ This solution is reasonably secure, but there are additional controls you may ch
 - azd hooks/extensibility: https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-extensibility
 - Manage azd environment variables: https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables
 - App Service custom domain: https://learn.microsoft.com/azure/app-service/app-service-web-tutorial-custom-domain
+
+## Retained runtime migration
+
+This retained Automation copy uses Maester 2.3.0 with an embedded strict
+assessment/report gate. See the [catalog migration record](../docs/retained-maester-230-migration.md)
+for exact source provenance and remaining consent/native acceptance. Its existing
+validator remains status/stream-based, not the standalone job-content receipt
+protocol. This source migration neither runs nor grants anything in Azure.

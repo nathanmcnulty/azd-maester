@@ -20,9 +20,10 @@ migration.
 | `azure-devops` | [`nathanmcnulty/azd-maester-azuredevops`](https://github.com/nathanmcnulty/azd-maester-azuredevops) | [`docs/backlog.json`](https://github.com/nathanmcnulty/azd-maester-azuredevops/blob/main/docs/backlog.json) | `azd init -t nathanmcnulty/azd-maester-azuredevops` | `cd azure-devops` then `azd up` |
 
 Each standalone repository uses `main` as its default branch and its README
-names the corresponding `azd init -t` source. Each template pins the stable
-Maester module `2.2.0` and vendors shared hook/permission behavior and the
-optional report web app from
+names the corresponding `azd init -t` source. The retained Function and Automation runtimes now pin Maester `2.3.0`; the
+Container Job and Azure DevOps retained runtimes still pin `2.2.0`. Reviewed-consent adoption remains separate and
+incomplete. See the [bounded migration record](docs/retained-maester-230-migration.md).
+The templates vendor shared hook/permission behavior and the optional report web app from
 [`azd-reference`](https://github.com/nathanmcnulty/azd-reference), with exact
 component revisions and hashes in `azd-components.lock.json`.
 
