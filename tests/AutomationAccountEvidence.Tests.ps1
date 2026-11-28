@@ -6,6 +6,8 @@ Import-Module $evidenceModule -Force
 
 Describe 'Automation Account deployment evidence' {
   BeforeEach {
+    $completedAt = [datetimeoffset]::UtcNow
+    $validationStartedAt = $completedAt.AddMinutes(-1)
     $script:tenantId = '22222222-2222-2222-2222-222222222222'
     $script:subscriptionId = '11111111-1111-1111-1111-111111111111'
     $script:operationId = '33333333-3333-3333-3333-333333333333'
@@ -17,14 +19,14 @@ Describe 'Automation Account deployment evidence' {
       ValidationPassed = $true
       JobId = '44444444-4444-4444-4444-444444444444'
       FinalStatus = 'Completed'
-      CompletedAt = '2026-09-21T12:00:00Z'
+      CompletedAt = $completedAt.ToString('o')
     }
   }
 
   It 'writes schema 1.0 evidence for a direct azd deployment' {
     $result = Write-MaesterDeploymentEvidence `
       -RepositoryRoot $TestDrive `
-      -ValidationStartedAt ([datetimeoffset]'2026-09-21T11:59:00Z') `
+      -ValidationStartedAt $validationStartedAt `
       -ValidationResult $validationResult `
       -Resources $resources `
       -EnvironmentName pilot `
@@ -36,6 +38,7 @@ Describe 'Automation Account deployment evidence' {
 
     $result.Report.schemaVersion | Should -Be '1.0'
     $result.Report.outcome | Should -Be 'passed'
+    $result.Report.durationMs | Should -BeGreaterThan 0
     $runtimeCheck = $result.Report.checks | Where-Object id -eq 'runtime.runbook-job'
     $runtimeCheck.title | Should -Be 'Maester report lifecycle'
     $runtimeCheck.summary | Should -Match 'Review the Maester report for test outcomes'
@@ -60,7 +63,7 @@ Describe 'Automation Account deployment evidence' {
 
     $result = Write-MaesterDeploymentEvidence `
       -RepositoryRoot $TestDrive `
-      -ValidationStartedAt ([datetimeoffset]'2026-09-21T11:59:00Z') `
+      -ValidationStartedAt $validationStartedAt `
       -ValidationResult $validationResult `
       -Resources $resources `
       -EnvironmentName pilot `
@@ -99,11 +102,11 @@ Describe 'Automation Account deployment evidence' {
       ValidationPassed = $false
       JobId = '00000000-0000-0000-0000-000000000000'
       FinalStatus = 'Failed'
-      CompletedAt = '2026-09-21T12:00:00Z'
+      CompletedAt = $completedAt.ToString('o')
     }
     $result = Write-MaesterDeploymentEvidence `
       -RepositoryRoot $TestDrive `
-      -ValidationStartedAt ([datetimeoffset]'2026-09-21T11:59:00Z') `
+      -ValidationStartedAt $validationStartedAt `
       -ValidationResult $failed `
       -Resources $resources `
       -EnvironmentName pilot `
